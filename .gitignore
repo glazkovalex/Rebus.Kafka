@@ -1,0 +1,10 @@
+﻿################################################################################
+# Данный GITIGNORE-файл был автоматически создан Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/Rebus/v15
+/Rebus.Kafka/bin
+/Rebus.Kafka/obj
+/Rebus.Kafka.Tests/bin
+/Rebus.Kafka.Tests/obj
+/Rebus.sln.DotSettings.user
