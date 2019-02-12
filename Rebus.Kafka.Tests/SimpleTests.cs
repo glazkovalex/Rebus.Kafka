@@ -1,4 +1,4 @@
-using Autofac;
+п»їusing Autofac;
 using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
@@ -29,7 +29,7 @@ namespace Rebus.Kafka.Tests
 					amount = amount + message.MessageNumber;
 					_output.WriteLine($"Received : \"{message.MessageNumber}\"");
 					if (message.MessageNumber == messageCount)
-						_output.WriteLine($"Получено {messageCount} сообщений за {sw.ElapsedMilliseconds / 1000f:N3}с");
+						_output.WriteLine($"РџРѕР»СѓС‡РµРЅРѕ {messageCount} СЃРѕРѕР±С‰РµРЅРёР№ Р·Р° {sw.ElapsedMilliseconds / 1000f:N3}СЃ");
 					return Task.CompletedTask;
 				});
 
@@ -88,14 +88,14 @@ namespace Rebus.Kafka.Tests
 			}
 		}
 
-		#region Настройка
+		#region РќР°СЃС‚СЂРѕР№РєР°
 
 		internal static int amount;
 		const int messageCount = 10;
 		private readonly ITestOutputHelper _output;
 		static readonly string kafkaEndpoint = "192.168.0.166:9092";
 
-		/// <summary>Создает новый экземпляр <see cref="SimpleTests"/>.</summary>
+		/// <summary>РЎРѕР·РґР°РµС‚ РЅРѕРІС‹Р№ СЌРєР·РµРјРїР»СЏСЂ <see cref="SimpleTests"/>.</summary>
 		public SimpleTests(ITestOutputHelper output)
 		{
 			this._output = output;
@@ -104,7 +104,7 @@ namespace Rebus.Kafka.Tests
 		#endregion
 	}
 
-	/// <summary>Классс передаваемого сообщения</summary>
+	/// <summary>РљР»Р°СЃСЃСЃ РїРµСЂРµРґР°РІР°РµРјРѕРіРѕ СЃРѕРѕР±С‰РµРЅРёСЏ</summary>
 	public class Message
 	{
 		public int MessageNumber { get; set; }
@@ -123,7 +123,7 @@ namespace Rebus.Kafka.Tests
 
 		private readonly ITestOutputHelper _output;
 
-		/// <summary>Создает новый экземпляр <see cref="MessageHandler"/>.</summary>
+		/// <summary>РЎРѕР·РґР°РµС‚ РЅРѕРІС‹Р№ СЌРєР·РµРјРїР»СЏСЂ <see cref="MessageHandler"/>.</summary>
 		public MessageHandler(ITestOutputHelper output)
 		{
 			_output = output;
