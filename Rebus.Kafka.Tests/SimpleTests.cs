@@ -28,8 +28,8 @@ namespace Rebus.Kafka.Tests
 				{
 					amount = amount + message.MessageNumber;
 					_output.WriteLine($"Received : \"{message.MessageNumber}\"");
-					if (message.MessageNumber == messageCount)
-						_output.WriteLine($"Получено {messageCount} сообщений за {sw.ElapsedMilliseconds / 1000f:N3}с");
+					if (message.MessageNumber == MessageCount)
+						_output.WriteLine($"Получено {MessageCount} сообщений за {sw.ElapsedMilliseconds / 1000f:N3}с");
 					return Task.CompletedTask;
 				});
 
@@ -40,7 +40,7 @@ namespace Rebus.Kafka.Tests
 					.Start();
 
 				var sendAmount = 0;
-				var messages = Enumerable.Range(1, messageCount)
+				var messages = Enumerable.Range(1, MessageCount)
 					.Select(i =>
 					{
 						sendAmount = sendAmount + i;
@@ -57,7 +57,7 @@ namespace Rebus.Kafka.Tests
 		[Fact]
 		public void PublishSubscribe()
 		{
-			IContainer _container;
+			IContainer container;
 			var builder = new ContainerBuilder();
 			builder.RegisterInstance(_output).As<ITestOutputHelper>().SingleInstance();
 			builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
@@ -67,14 +67,14 @@ namespace Rebus.Kafka.Tests
 				.Options(o => o.SetMaxParallelism(5))
 			);
 
-			using (_container = builder.Build())
-			using (IBus bus = _container.Resolve<IBus>())
+			using (container = builder.Build())
+			using (IBus bus = container.Resolve<IBus>())
 			{
 				bus.Subscribe<Message>().Wait();
 
 				var sendAmount = 0;
 				bus.Publish(new Message { MessageNumber = 0 }).Wait();
-				var messages = Enumerable.Range(1, messageCount)
+				var messages = Enumerable.Range(1, MessageCount)
 					.Select(i =>
 				   {
 					   sendAmount = sendAmount + i;
@@ -84,14 +84,14 @@ namespace Rebus.Kafka.Tests
 				Task.WaitAll(messages);
 				Thread.Sleep(10000);
 
-				Assert.Equal(amount, sendAmount);
+				Assert.Equal(Amount, sendAmount);
 			}
 		}
 
 		#region Настройка
 
-		internal static int amount;
-		const int messageCount = 10;
+		internal static int Amount;
+		const int MessageCount = 10;
 		private readonly ITestOutputHelper _output;
 		static readonly string kafkaEndpoint = "192.168.0.166:9092";
 
@@ -116,7 +116,7 @@ namespace Rebus.Kafka.Tests
 		/// <inheritdoc />
 		public Task Handle(Message evnt)
 		{
-			SimpleTests.amount += evnt.MessageNumber;
+			SimpleTests.Amount += evnt.MessageNumber;
 			_output.WriteLine($"Received : \"{evnt.MessageNumber}\"");
 			return Task.CompletedTask;
 		}

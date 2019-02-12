@@ -12,15 +12,5 @@ namespace Rebus.Kafka.Serialization
 		{
 			return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data));
 		}
-
-		//public IEnumerable<KeyValuePair<string, object>> Configure(IEnumerable<KeyValuePair<string, object>> config, bool isKey)
-		//{
-		//	return config;
-		//}
-
-		///// <inheritdoc />
-		//public void Dispose()
-		//{
-		//}
 	}
 }

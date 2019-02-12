@@ -1,9 +1,8 @@
-﻿using System;
+﻿using Confluent.Kafka;
 using Newtonsoft.Json;
 using Rebus.Messages;
-using System.Collections.Generic;
+using System;
 using System.Text;
-using Confluent.Kafka;
 
 namespace Rebus.Kafka.Serialization
 {

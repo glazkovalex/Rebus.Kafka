@@ -165,16 +165,5 @@ namespace Rebus.Kafka
 				// consumer.Unassign()
 			}
 		}
-
-		//private void OnConsumeError(object sender, Message message)
-		//{
-		//	_logger?.LogError(
-		//		"Error consuming from Kafka. Topic/partition/offset: '{topic}/{partition}/{offset}'. Error: '{error}'.",
-		//		message.Topic,
-		//		message.Partition,
-		//		message.Offset,
-		//		message.Error);
-		//	throw new KafkaException(message.Error);
-		//}
 	}
 }

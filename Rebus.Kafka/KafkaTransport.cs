@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 
 namespace Rebus.Kafka
 {
+	/// <summary>Реализация транспорта Apache Kafka для сервисной шины Rebus</summary>
 	public class KafkaTransport : ITransport, IInitializable, IDisposable, ISubscriptionStorage
 	{
 		public void CreateQueue(string address)
