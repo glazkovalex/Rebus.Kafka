@@ -6,7 +6,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>Rebus.Kafka</PackageId>
     <Description>Apache Kafka transport for Rebus.
-So as to interact with the Apache Kafka requires the unmanaged library “librdkafka”, you need to install the package “librdkafka.redist -Version 1.0.0-RC7 or newer”. If this unmanaged “librdkafka” is not found automatically, you must load it before you can use Rebus.Kafka for the first time as follows: "Library.Load (pathToLibrd)".</Description>
+So as to interact with the Apache Kafka requires the unmanaged “librdkafka”, you need to install the package “librdkafka.redist -Version 1.0.0-RC7 or newer”. If this unmanaged “librdkafka” is not found automatically, you must load it before you can use Rebus.Kafka for the first time as follows: "Library.Load (pathToLibrd)".</Description>
     <PackageTags>messaging, rebus, queue, service, bus, Kafka, Confluent, librdkafka</PackageTags>
     <Company />
     <Version>0.1.6</Version>
