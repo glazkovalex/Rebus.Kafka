@@ -19,3 +19,6 @@ So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you
 if (!Library.IsLoaded)
 	Confluent.Kafka.Library.Load(pathToLibrd);
 ```
+
+---
+If you have any recommendations or comments, I will be glad to hear.
