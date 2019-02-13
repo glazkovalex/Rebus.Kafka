@@ -8,3 +8,11 @@
 /Rebus.Kafka.Tests/bin
 /Rebus.Kafka.Tests/obj
 /Rebus.sln.DotSettings.user
+/TestResults/91e6b384-4fab-4e22-8e2a-f47485d7ba13/Alexandr_SERVER 2019-02-13 22_47_28.coverage
+/Examples/BusScaleoutWitchDetailedConfiguration/bin/Debug/netcoreapp2.2
+/Examples/BusScaleoutWitchDetailedConfiguration/obj
+/Examples/ProducerConsumer/bin/Debug/netcoreapp2.2
+/Examples/ProducerConsumer/obj
+/Examples/BusScaleoutWitchDetailedConfiguration
+/Examples/ProducerConsumer/bin/Release/netcoreapp2.2
+/TestResults/63ffdcc2-9d18-48d2-b3ad-9bc28d9a6867/Alexandr_SERVER 2019-02-14 01_24_45.coverage

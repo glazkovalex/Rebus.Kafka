@@ -10,15 +10,59 @@ builder.RegisterRebus((configurer, context) => configurer
 	.Transport(t => t.UseKafka("localhost:9092", "InputQueueName", "groupName"))
 );
 ```
-See unit tests for details.
+
+From version 0.1.8 you can set all the parameters of the producer and the consumer used in the bus transport.
+```csharp
+var producerConfig = new ProducerConfig
+{
+	//BootstrapServers = , //will be set from the general parameter
+	ApiVersionRequest = true,
+	QueueBufferingMaxKbytes = 10240,
+#if DEBUG
+	Debug = "msg",
+#endif
+	MessageTimeoutMs = 3000,
+};
+producerConfig.Set("request.required.acks", "-1");
+producerConfig.Set("queue.buffering.max.ms", "5");
+
+var consumerConfig = new ConsumerConfig
+{
+	//BootstrapServers = , //will be set from the general parameter
+	ApiVersionRequest = true,
+	GroupId = "temp",
+	EnableAutoCommit = false,
+	FetchWaitMaxMs = 5,
+	FetchErrorBackoffMs = 5,
+	QueuedMinMessages = 1000,
+	SessionTimeoutMs = 6000,
+	//StatisticsIntervalMs = 5000,
+#if DEBUG
+	Debug = "msg",
+#endif
+	AutoOffsetReset = AutoOffsetReset.Latest,
+	EnablePartitionEof = true
+};
+consumerConfig.Set("fetch.message.max.bytes", "10240");
+
+#endregion
+
+Configure.With(adapter)
+	.Transport(t => t.UseKafka("localhost:9092", "InputQueueName", producerConfig, consumerConfig))
+	.Start();
+```
+
+See tests and examples for details.
 
 #### Note: 
-So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the package "[librdkafka.redist -Version 1.0.0-RC7](https://www.nuget.org/packages/librdkafka.redist/1.0.0-RC7 "librdkafka.redist -Version 1.0.0-RC7") or newer". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use [Rebus.Kafka](https://github.com/glazkovalex/Rebus.Kafka) for the first time as follows:
+- So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the package "[librdkafka.redist -Version 1.0.0-RC7](https://www.nuget.org/packages/librdkafka.redist/1.0.0-RC7 "librdkafka.redist -Version 1.0.0-RC7") or newer". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use [Rebus.Kafka](https://github.com/glazkovalex/Rebus.Kafka) for the first time as follows:
 
 ```csharp
 if (!Library.IsLoaded)
 	Confluent.Kafka.Library.Load(pathToLibrd);
 ```
+
+- Due to the features of Kafka with default settings after subscribing to messages for some time while there is a rebalancing of clients in groups, lasting several seconds. Messages that came at this time are stored in Kafka, but they will be missed and will not get new customers. What are the options for overcoming this, read the Apache Kafka documentation.
 
 ---
 If you have any recommendations or comments, I will be glad to hear.

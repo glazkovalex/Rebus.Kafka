@@ -110,6 +110,12 @@ namespace Rebus.Kafka
 		{
 			_knownRoutes.TryRemove(topic, out var _);
 			var topics = _knownRoutes.Values;
+			//try
+			{
+				_consumer.Commit(CancellationToken.None);
+			}
+			//catch (Exception) { /* ignored */ }
+
 			if (topics.Count > 0)
 			{
 				_consumer.Unsubscribe();

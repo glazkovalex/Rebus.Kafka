@@ -3,9 +3,15 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.329
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Kafka", "Rebus.Kafka\Rebus.Kafka.csproj", "{9AF8EFE0-B5C6-4B43-ABD5-66190ED13FF5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Rebus.Kafka", "Rebus.Kafka\Rebus.Kafka.csproj", "{9AF8EFE0-B5C6-4B43-ABD5-66190ED13FF5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rebus.Kafka.Tests", "Rebus.Kafka.Tests\Rebus.Kafka.Tests.csproj", "{D183CD0E-32F4-4B4B-B35A-28EFAED66E72}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Rebus.Kafka.Tests", "Rebus.Kafka.Tests\Rebus.Kafka.Tests.csproj", "{D183CD0E-32F4-4B4B-B35A-28EFAED66E72}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{99192087-E06A-44BE-9B0A-80767F9C46E7}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ProducerConsumer", "Examples\ProducerConsumer\ProducerConsumer.csproj", "{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BusScaleoutWitchDetailedConfiguration", "Examples\BusScaleoutWitchDetailedConfiguration\BusScaleoutWitchDetailedConfiguration.csproj", "{627E46DB-FAB9-43FB-8B60-E37BA32A29FF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,9 +27,21 @@ Global
 		{D183CD0E-32F4-4B4B-B35A-28EFAED66E72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D183CD0E-32F4-4B4B-B35A-28EFAED66E72}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D183CD0E-32F4-4B4B-B35A-28EFAED66E72}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65}.Release|Any CPU.Build.0 = Release|Any CPU
+		{627E46DB-FAB9-43FB-8B60-E37BA32A29FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{627E46DB-FAB9-43FB-8B60-E37BA32A29FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{627E46DB-FAB9-43FB-8B60-E37BA32A29FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{627E46DB-FAB9-43FB-8B60-E37BA32A29FF}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{29FDE61F-0EE6-4BBC-AFE2-BBD93148AB65} = {99192087-E06A-44BE-9B0A-80767F9C46E7}
+		{627E46DB-FAB9-43FB-8B60-E37BA32A29FF} = {99192087-E06A-44BE-9B0A-80767F9C46E7}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5B53D2CE-3FFB-4D18-83E9-1BF79A6E9F88}
