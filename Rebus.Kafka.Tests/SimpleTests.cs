@@ -95,7 +95,7 @@ namespace Rebus.Kafka.Tests
 		private readonly ITestOutputHelper _output;
 		static readonly string kafkaEndpoint = "192.168.0.166:9092";
 
-		/// <summary>Создает новый экземпляр <see cref="SimpleTests"/>.</summary>
+		/// <summary>Creates new instance <see cref="SimpleTests"/>.</summary>
 		public SimpleTests(ITestOutputHelper output)
 		{
 			this._output = output;
@@ -104,7 +104,7 @@ namespace Rebus.Kafka.Tests
 		#endregion
 	}
 
-	/// <summary>Классс передаваемого сообщения</summary>
+	/// <summary>Message class used for testing</summary>
 	public class Message
 	{
 		public int MessageNumber { get; set; }
@@ -123,7 +123,7 @@ namespace Rebus.Kafka.Tests
 
 		private readonly ITestOutputHelper _output;
 
-		/// <summary>Создает новый экземпляр <see cref="MessageHandler"/>.</summary>
+		/// <summary>Creates new instance <see cref="MessageHandler"/>.</summary>
 		public MessageHandler(ITestOutputHelper output)
 		{
 			_output = output;

@@ -9,13 +9,13 @@ namespace Rebus.Kafka
 {
 	public static class KafkaTransportOptions
 	{
-		// на основе : https://github.com/rebus-org/Rebus.AzureServiceBus/blob/master/Rebus.AzureServiceBus/Config/AzureServiceBusConfigurationExtensions.cs
+		// Based on: https://github.com/rebus-org/Rebus.AzureServiceBus/blob/master/Rebus.AzureServiceBus/Config/AzureServiceBusConfigurationExtensions.cs
 		const string AsbSubStorageText = "The Kafka transport was inserted as the subscriptions storage because it has native support for pub/sub messaging";
 
 		public static void UseKafka(this StandardConfigurer<ITransport> configurer,
 			string brokerList, string inputQueueName, string groupId = null)
 		{
-			// Сопоставил транспорт самому себе внедрения в качестве ISubscriptionStorage
+			// Register implementation of the transport as ISubscriptionStorage as well
 			configurer
 				.OtherService<KafkaTransport>()
 				.Register(c =>
@@ -28,10 +28,10 @@ namespace Rebus.Kafka
 					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, groupId);
 				});
 
-			// Совоставил ITransport к реализации даного транспорта
+			// Register implementation of the Transport as ITransport
 			configurer.Register(c => c.Get<KafkaTransport>());
 
-			// Сопоставил хранилище подписчиков к самому транспорту
+			// Link the ISubscriberStorage to the transport
 			configurer
 				.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);

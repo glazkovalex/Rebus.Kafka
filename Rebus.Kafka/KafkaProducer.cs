@@ -7,13 +7,13 @@ using System.Threading.Tasks;
 
 namespace Rebus.Kafka
 {
-	/// <summary>Примерный производитель сообщений</summary>
+	/// <summary>Example message producer</summary>
 	public class KafkaProducer : IDisposable
 	{
 		private readonly ILogger _logger;
 		private readonly Producer<Null, string> _producer;
 
-		/// <summary>Создает новый экземпляр <see cref="KafkaProducer"/>.</summary>
+		/// <summary>Creates new instance <see cref="KafkaProducer"/>.</summary>
 		public KafkaProducer(ILogger logger, string brokerEndpoints)
 		{
 			_logger = logger;
@@ -41,8 +41,8 @@ namespace Rebus.Kafka
 				.Build();
 		}
 
-		/// <summary>Создает новый экземпляр <see cref="KafkaProducer"/> на основе подключения имеющегося в другом продюсере.</summary>
-		/// <param name="dependentProducer">Другой продусер для извлечения подключения</param>
+		/// <summary>Creates new instance <see cref="KafkaProducer"/> based on the connection settings in another producer.</summary>
+		/// <param name="dependentProducer">Another producer instance to take the connection from</param>
 		public KafkaProducer(Producer<Null, string> dependentProducer)
 		{
 			if (dependentProducer == null)
@@ -50,11 +50,11 @@ namespace Rebus.Kafka
 			_producer = new DependentProducerBuilder<Null, string>(dependentProducer.Handle).Build();
 		}
 
-		/// <summary>Отправить сообщение в указанный топик</summary>
-		/// <param name="topic">Топик назначения</param>
-		/// <param name="value">Сообщение</param>
-		/// <param name="cancellationToken">Токен</param>
-		/// <returns>Результат отправки</returns>
+		/// <summary>Send a message to a specific topic</summary>
+		/// <param name="topic">Target topic</param>
+		/// <param name="value">Message to send</param>
+		/// <param name="cancellationToken">Token</param>
+		/// <returns>Send result</returns>
 		public async Task<DeliveryResult<Null, string>> ProduceAsync(string topic, Message<Null, string> value
 			, CancellationToken cancellationToken = default(CancellationToken))
 		{
@@ -83,7 +83,7 @@ namespace Rebus.Kafka
 
 		public void Dispose()
 		{
-			// Так как задачи, возвращаемые ProduceAsync, могут не ожидаться, сообщения могут быть все еще в полете.
+			// Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent
 			_producer.Flush(TimeSpan.FromSeconds(5));
 			_producer?.Dispose();
 		}
