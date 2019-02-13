@@ -9,14 +9,14 @@ using System.Threading.Tasks;
 
 namespace Rebus.Kafka
 {
-	/// <summary>Примерный потребитель сообщений</summary>
+	/// <summary>Example message consumer</summary>
 	public sealed class KafkaConsumer : IDisposable
 	{
 		private readonly ILogger _logger;
 		private IEnumerable<string> _topics;
 		private readonly Consumer<Null, string> _consumer;
 
-		/// <summary>Создает новый экземпляр <see cref="KafkaConsumer"/>.</summary>
+		/// <summary>Creates new instance <see cref="KafkaConsumer"/>.</summary>
 		public KafkaConsumer(ILogger logger, string brokerEndpoints, string groupId = null)
 		{
 			_logger = logger;
@@ -58,9 +58,9 @@ namespace Rebus.Kafka
 
 		public Consumer<Null, string> Consumer => _consumer; 
 
-		/// <summary>Поглощать входящие сообщения</summary>
-		/// <param name="topics">Топики, из которых хочется поглощать</param>
-		/// <param name="action">Обработчик входящих сообщений</param>
+		/// <summary>Subscribes to incoming messages</summary>
+		/// <param name="topics">Topics to subscribe to using the given message handler</param>
+		/// <param name="action">Incoming message handler</param>
 		/// <param name="cancellationToken"></param>
 		/// <returns></returns>
 		public Task Consume(IEnumerable<string> topics, Action<Message<Null, string>> action, CancellationToken cancellationToken)

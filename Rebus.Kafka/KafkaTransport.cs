@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 namespace Rebus.Kafka
 {
-	/// <summary>Реализация транспорта Apache Kafka для сервисной шины Rebus</summary>
+	/// <summary>Implementation of Apache Kafka Transport for Rebus</summary>
 	public class KafkaTransport : ITransport, IInitializable, IDisposable, ISubscriptionStorage
 	{
 		public void CreateQueue(string address)
@@ -126,7 +126,7 @@ namespace Rebus.Kafka
 		/// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
 		public void Initialize()
 		{
-			// ToDo: Вынести в параметры транспорта шины
+			// ToDo: Allow configuring transport options via Rebus
 			var producerConfig = new ProducerConfig
 			{
 				BootstrapServers = _brokerList,
@@ -152,7 +152,7 @@ namespace Rebus.Kafka
 				_producer = builder.Build();
 			}
 			catch (DllNotFoundException)
-			{   // Загрузка злоебучей librdkafka.dll
+			{   // Try loading librdkafka.dll
 				if (!Library.IsLoaded)
 				{
 					string directory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().GetName().CodeBase.Substring(8));
@@ -163,8 +163,8 @@ namespace Rebus.Kafka
 				}
 				_producer = builder.Build();
 			}
-			// ToDo: Вынести в параметры транспорта шины
-			var config = new ConsumerConfig
+      // ToDo: Allow configuring transport options
+      var config = new ConsumerConfig
 			{
 				BootstrapServers = _brokerList,
 				ApiVersionRequest = true,
@@ -299,8 +299,8 @@ namespace Rebus.Kafka
 
 		public void Dispose()
 		{
-			// Так как задачи, возвращаемые ProduceAsync, могут не ожидаться, сообщения могут быть все еще в полете.
-			_producer?.Flush(TimeSpan.FromSeconds(5));
+      // Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent
+      _producer?.Flush(TimeSpan.FromSeconds(5));
 			_producer?.Dispose();
 			try
 			{
