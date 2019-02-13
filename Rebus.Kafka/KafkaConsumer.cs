@@ -17,13 +17,17 @@ namespace Rebus.Kafka
 		private readonly Consumer<Null, string> _consumer;
 
 		/// <summary>Creates new instance <see cref="KafkaConsumer"/>.</summary>
-		public KafkaConsumer(ILogger logger, string brokerEndpoints, string groupId = null)
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		/// <param name="groupId">Id of group</param>
+		/// <param name="logger"></param>
+		public KafkaConsumer(string brokerList, string groupId = null, ILogger logger = null)
 		{
 			_logger = logger;
-
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
 			var config = new ConsumerConfig
 			{
-				BootstrapServers = brokerEndpoints,
+				BootstrapServers = brokerList,
 				ApiVersionRequest = true,
 				GroupId = !string.IsNullOrEmpty(groupId) ? groupId : Guid.NewGuid().ToString(),
 				EnableAutoCommit = false,
@@ -56,7 +60,39 @@ namespace Rebus.Kafka
 				.Build();
 		}
 
-		public Consumer<Null, string> Consumer => _consumer; 
+		/// <summary>Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
+		/// all the parameters of the consumer used in this transport.</summary>
+		/// <param name="consumerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' and 'group.id' must be
+		///     specified.</param>
+		/// <param name="logger"></param>
+		public KafkaConsumer(ConsumerConfig consumerConfig, ILogger logger = null)
+		{
+			_logger = logger;
+			if (string.IsNullOrWhiteSpace(consumerConfig?.BootstrapServers))
+				throw new NullReferenceException($"{nameof(consumerConfig)}.{nameof(consumerConfig.BootstrapServers)}");
+			if (string.IsNullOrEmpty(consumerConfig.GroupId))
+				consumerConfig.GroupId = Guid.NewGuid().ToString("N");
+
+			// Note: If a key or value deserializer is not set (as is the case below), the 
+			// deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
+			// will be used automatically (where available). The default deserializer for string
+			// is UTF8. The default deserializer for Ignore returns null for all input data
+			// (including non-null data).
+			_consumer = new ConsumerBuilder<Null, string>(consumerConfig)
+				.SetKeyDeserializer(Deserializers.Null)
+				.SetValueDeserializer(Deserializers.Utf8)
+				.SetLogHandler(OnLog)
+				.SetErrorHandler(OnError)
+				.SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
+				.SetRebalanceHandler(OnRebalance)
+				.Build();
+		}
+
+		public Consumer<Null, string> Consumer => _consumer;
 
 		/// <summary>Subscribes to incoming messages</summary>
 		/// <param name="topics">Topics to subscribe to using the given message handler</param>

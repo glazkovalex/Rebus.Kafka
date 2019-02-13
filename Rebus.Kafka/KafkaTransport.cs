@@ -126,22 +126,7 @@ namespace Rebus.Kafka
 		/// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
 		public void Initialize()
 		{
-			// ToDo: Allow configuring transport options via Rebus
-			var producerConfig = new ProducerConfig
-			{
-				BootstrapServers = _brokerList,
-				ApiVersionRequest = true,
-				QueueBufferingMaxKbytes = 10240,
-				//{ "socket.blocking.max.ms", 1 }, // **DEPRECATED * *No longer used.
-#if DEBUG
-				Debug = "msg",
-#endif
-				MessageTimeoutMs = 3000,
-			};
-			producerConfig.Set("request.required.acks", "-1");
-			producerConfig.Set("queue.buffering.max.ms", "5");
-
-			var builder = new ProducerBuilder<Ignore, TransportMessage>(producerConfig)
+			var builder = new ProducerBuilder<Ignore, TransportMessage>(_producerConfig)
 				.SetKeySerializer(new IgnoreSerializer())
 				.SetValueSerializer(new TransportMessageSerializer())
 				.SetLogHandler(ProducerOnLog)
@@ -156,40 +141,20 @@ namespace Rebus.Kafka
 				if (!Library.IsLoaded)
 				{
 					string directory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().GetName().CodeBase.Substring(8));
-					var pathToLibrd = System.IO.Path.Combine(directory, $"librdkafka/{(Environment.Is64BitOperatingSystem ? "x64" : "x86")}/librdkafka.dll");
+					var pathToLibrd = System.IO.Path.Combine(directory, $"librdkafka\\{(Environment.Is64BitOperatingSystem ? "x64" : "x86")}\\librdkafka.dll");
 					_log.Info($"librdkafka is not loaded. Trying to load {pathToLibrd}");
-					Confluent.Kafka.Library.Load(pathToLibrd);
+					Library.Load(pathToLibrd);
 					_log.Info($"Using librdkafka version: {Library.Version}");
 				}
 				_producer = builder.Build();
 			}
-      // ToDo: Allow configuring transport options
-      var config = new ConsumerConfig
-			{
-				BootstrapServers = _brokerList,
-				ApiVersionRequest = true,
-				GroupId = !string.IsNullOrEmpty(_groupId) ? _groupId : Guid.NewGuid().ToString("N"),
-				EnableAutoCommit = false,
-				FetchWaitMaxMs = 5,
-				FetchErrorBackoffMs = 5,
-				QueuedMinMessages = 1000,
-				SessionTimeoutMs = 6000,
-				//StatisticsIntervalMs = 5000,
-#if DEBUG
-
-				Debug = "msg",
-#endif
-				AutoOffsetReset = AutoOffsetReset.Latest,
-				EnablePartitionEof = true
-			};
-			config.Set("fetch.message.max.bytes", "10240");
 
 			// Note: If a key or value deserializer is not set (as is the case below), the 
 			// deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
 			// will be used automatically (where available). The default deserializer for string
 			// is UTF8. The default deserializer for Ignore returns null for all input data
 			// (including non-null data).
-			_consumer = new ConsumerBuilder<Ignore, TransportMessage>(config)
+			_consumer = new ConsumerBuilder<Ignore, TransportMessage>(_consumerConfig)
 				.SetKeyDeserializer(Deserializers.Ignore)
 				.SetValueDeserializer(new TransportMessageDeserializer())
 				.SetLogHandler(ConsumerOnLog)
@@ -271,17 +236,28 @@ namespace Rebus.Kafka
 
 		readonly ILog _log;
 		readonly IAsyncTaskFactory _asyncTaskFactory;
+
 		private Producer<Ignore, TransportMessage> _producer;
+		private readonly ProducerConfig _producerConfig;
 		private Consumer<Ignore, TransportMessage> _consumer;
-		private readonly string _brokerList;
-		private readonly string _groupId;
+		private readonly ConsumerConfig _consumerConfig;
+
 		private readonly ConcurrentDictionary<string, string> _knownRoutes;
 		private readonly string _magicSubscriptionPrefix = "---Topic---.";
 		private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
 
+		/// <summary>Creates new instance <see cref="KafkaTransport"/>. Performs a simplified
+		/// configuration of the parameters of the manufacturer and the consumer used in this transport.</summary>
+		/// <param name="rebusLoggerFactory"></param>
+		/// <param name="asyncTaskFactory"></param>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		/// <param name="inputQueueName">name of input queue</param>
+		/// <param name="groupId">Id of group</param>
 		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory,
 			string brokerList, string inputQueueName, string groupId = null)
 		{
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
 			var maxNameLength = 249;
 			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
 				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
@@ -291,16 +267,89 @@ namespace Rebus.Kafka
 			_knownRoutes = new ConcurrentDictionary<string, string>();
 			_knownRoutes.TryAdd(inputQueueName, inputQueueName);
 			Address = inputQueueName;
-			_brokerList = brokerList;
-			_groupId = groupId;
+			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
+			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
+
+			_producerConfig = new ProducerConfig
+			{
+				BootstrapServers = brokerList,
+				ApiVersionRequest = true,
+				QueueBufferingMaxKbytes = 10240,
+				//{ "socket.blocking.max.ms", 1 }, // **DEPRECATED * *No longer used.
+#if DEBUG
+				Debug = "msg",
+#endif
+				MessageTimeoutMs = 3000,
+			};
+			_producerConfig.Set("request.required.acks", "-1");
+			_producerConfig.Set("queue.buffering.max.ms", "5");
+
+			_consumerConfig = new ConsumerConfig
+			{
+				BootstrapServers = brokerList,
+				ApiVersionRequest = true,
+				GroupId = !string.IsNullOrEmpty(groupId) ? groupId : Guid.NewGuid().ToString("N"),
+				EnableAutoCommit = false,
+				FetchWaitMaxMs = 5,
+				FetchErrorBackoffMs = 5,
+				QueuedMinMessages = 1000,
+				SessionTimeoutMs = 6000,
+				//StatisticsIntervalMs = 5000,
+#if DEBUG
+
+				Debug = "msg",
+#endif
+				AutoOffsetReset = AutoOffsetReset.Latest,
+				EnablePartitionEof = true
+			};
+			_consumerConfig.Set("fetch.message.max.bytes", "10240");
+		}
+
+		/// <summary>Creates new instance <see cref="KafkaTransport"/>. Allows you to configure
+		/// all the parameters of the producer and the consumer used in this transport.</summary>
+		/// <param name="rebusLoggerFactory"></param>
+		/// <param name="asyncTaskFactory"></param>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		/// <param name="inputQueueName">name of input queue</param>
+		/// <param name="producerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' must be specified.</param>
+		/// <param name="consumerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' and 'group.id' must be
+		///     specified.</param>
+		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory,
+			string brokerList, string inputQueueName, ProducerConfig producerConfig, ConsumerConfig consumerConfig)
+		{
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
+			var maxNameLength = 249;
+			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
+				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
+				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
+			_producerConfig = producerConfig ?? throw new NullReferenceException(nameof(producerConfig));
+			_producerConfig.BootstrapServers = brokerList;
+			_consumerConfig = consumerConfig ?? throw new NullReferenceException(nameof(consumerConfig));
+			_consumerConfig.BootstrapServers = brokerList;
+			if (string.IsNullOrEmpty(_consumerConfig.GroupId))
+				_consumerConfig.GroupId = Guid.NewGuid().ToString("N");
+
+			_knownRoutes = new ConcurrentDictionary<string, string>();
+			_knownRoutes.TryAdd(inputQueueName, inputQueueName);
+			Address = inputQueueName;
 			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
 			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 		}
 
 		public void Dispose()
 		{
-      // Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent
-      _producer?.Flush(TimeSpan.FromSeconds(5));
+			// Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent
+			_producer?.Flush(TimeSpan.FromSeconds(5));
 			_producer?.Dispose();
 			try
 			{

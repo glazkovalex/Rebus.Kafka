@@ -2,6 +2,7 @@
 using Confluent.Kafka.Serdes;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,13 +15,16 @@ namespace Rebus.Kafka
 		private readonly Producer<Null, string> _producer;
 
 		/// <summary>Creates new instance <see cref="KafkaProducer"/>.</summary>
-		public KafkaProducer(ILogger logger, string brokerEndpoints)
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		/// <param name="logger"></param>
+		public KafkaProducer(string brokerList, ILogger logger = null)
 		{
 			_logger = logger;
-
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
 			var config = new ProducerConfig
 			{
-				BootstrapServers = brokerEndpoints,
+				BootstrapServers = brokerList,
 				ApiVersionRequest = true,
 				QueueBufferingMaxKbytes = 10240,
 				//{ "socket.blocking.max.ms", 1 }, // **DEPRECATED * *No longer used.
@@ -41,13 +45,41 @@ namespace Rebus.Kafka
 				.Build();
 		}
 
-		/// <summary>Creates new instance <see cref="KafkaProducer"/> based on the connection settings in another producer.</summary>
-		/// <param name="dependentProducer">Another producer instance to take the connection from</param>
-		public KafkaProducer(Producer<Null, string> dependentProducer)
+		/// <summary>Creates new instance <see cref="KafkaProducer"/>. Allows you to configure
+		/// all the parameters of the producer.</summary>
+		/// <param name="producerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' must be specified.</param>
+		/// <param name="logger"></param>
+		public KafkaProducer(ProducerConfig producerConfig, ILogger logger = null)
 		{
-			if (dependentProducer == null)
-				throw new ArgumentNullException(nameof(dependentProducer));
+			_logger = logger;
+			if (string.IsNullOrWhiteSpace(producerConfig?.BootstrapServers))
+				throw new NullReferenceException($"{nameof(producerConfig)}.{nameof(producerConfig.BootstrapServers)}");
+
+			_producer = new ProducerBuilder<Null, string>(producerConfig)
+				.SetKeySerializer(Serializers.Null)
+				.SetValueSerializer(Serializers.Utf8)
+				.SetLogHandler(OnLog)
+				.SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
+				.SetErrorHandler(OnError)
+				.Build();
+		}
+
+		/// <summary>Creates new instance <see cref="KafkaProducer"/> based on the Another KafkaProducer instance for take
+		/// the underlying librdkafka client handle that the Producer will use to make broker requests.</summary>
+		/// <param name="dependentKafkaProducer">Another KafkaProducer instance to take the connection from.</param>
+		public KafkaProducer(KafkaProducer dependentKafkaProducer)
+		{
+			if (dependentKafkaProducer == null)
+				throw new ArgumentNullException(nameof(dependentKafkaProducer));
+			var dependentProducer = typeof(KafkaProducer).GetField(nameof(_producer), BindingFlags.Instance | BindingFlags.NonPublic)
+				?.GetValue(dependentKafkaProducer) as Producer<Null, string>;
 			_producer = new DependentProducerBuilder<Null, string>(dependentProducer.Handle).Build();
+			_logger = typeof(KafkaProducer).GetField(nameof(_logger), BindingFlags.Instance | BindingFlags.NonPublic)
+				?.GetValue(dependentKafkaProducer) as ILogger;
 		}
 
 		/// <summary>Send a message to a specific topic</summary>
