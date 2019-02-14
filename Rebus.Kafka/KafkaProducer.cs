@@ -121,13 +121,13 @@ namespace Rebus.Kafka
 		}
 
 		private void OnLog(Producer<Null, string> sender, LogMessage logMessage)
-			=> _logger?.LogInformation(
+			=> _logger?.LogDebug(
 				"Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
 				logMessage.Name,
 				logMessage.Level,
 				logMessage.Message);
 
 		private void OnError(Producer<Null, string> sender, Error error)
-			=> _logger?.LogInformation("Producer error: {error}. No action required.", error);
+			=> _logger?.LogWarning("Producer error: {error}. No action required.", error);
 	}
 }

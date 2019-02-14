@@ -174,22 +174,22 @@ namespace Rebus.Kafka
 		#region logging
 
 		private void ProducerOnLog(Producer<Ignore, TransportMessage> sender, LogMessage logMessage)
-			=> _log.Info(
+			=> _log.Debug(
 				"Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
 				logMessage.Name,
 				logMessage.Level,
 				logMessage.Message);
 
 		private void ProducerOnStatistics(Producer<Ignore, TransportMessage> sender, string json)
-			=> Console.WriteLine($"Producer statistics: {json}");
+			=> _log.Info($"Producer statistics: {json}");
 
 		private void ProducerOnError(Producer<Ignore, TransportMessage> sender, Error error)
-			=> _log.Info("Producer error: {error}. No action required.", error);
+			=> _log.Warn("Producer error: {error}. No action required.", error);
 
 		private void ConsumerOnLog(Consumer<Ignore, TransportMessage> sender, LogMessage logMessage)
 		{
 			if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
-				_log.Info(
+				_log.Debug(
 					"Consuming from Kafka. Client: '{client}', syslog level: '{logLevel}', message: '{logMessage}'.",
 					logMessage.Name,
 					logMessage.Level,
@@ -202,7 +202,7 @@ namespace Rebus.Kafka
 		private void ConsumerOnError(Consumer<Ignore, TransportMessage> sender, Error error)
 		{
 			if (!error.IsFatal)
-				_log.Info("Consumer error: {error}. No action required.", error);
+				_log.Warn("Consumer error: {error}. No action required.", error);
 			else
 			{
 				var values = sender.Position(sender.Assignment);

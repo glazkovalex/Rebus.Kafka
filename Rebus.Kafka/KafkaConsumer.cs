@@ -169,7 +169,7 @@ namespace Rebus.Kafka
 		private void OnLog(object sender, LogMessage logMessage)
 		{
 			if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
-				_logger?.LogInformation(
+				_logger?.LogDebug(
 					"Consuming from Kafka. Client: '{client}', syslog level: '{logLevel}', message: '{logMessage}'.",
 					logMessage.Name,
 					logMessage.Level,
@@ -179,7 +179,7 @@ namespace Rebus.Kafka
 		private void OnError(Consumer<Null, string> sender, Error error)
 		{
 			if (!error.IsFatal)
-				_logger?.LogInformation("Consumer error: {error}. No action required.", error);
+				_logger?.LogWarning("Consumer error: {error}. No action required.", error);
 			else
 			{
 				var values = sender.Position(sender.Assignment);
