@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Rebus.Kafka\Rebus.Kafka.csproj" />
+    <ProjectReference Include="..\Scaleout.Messages\Scaleout.Messages.csproj" />
   </ItemGroup>
 
 </Project>

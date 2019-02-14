@@ -11,13 +11,13 @@ namespace Rebus.Kafka
 	/// <summary>Example message producer</summary>
 	public class KafkaProducer : IDisposable
 	{
-		private readonly ILogger _logger;
+		private readonly ILogger<KafkaProducer> _logger;
 		private readonly Producer<Null, string> _producer;
 
 		/// <summary>Creates new instance <see cref="KafkaProducer"/>.</summary>
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
 		/// <param name="logger"></param>
-		public KafkaProducer(string brokerList, ILogger logger = null)
+		public KafkaProducer(string brokerList, ILogger<KafkaProducer> logger = null)
 		{
 			_logger = logger;
 			if (string.IsNullOrWhiteSpace(brokerList))
@@ -53,7 +53,7 @@ namespace Rebus.Kafka
 		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
 		///     At a minimum, 'bootstrap.servers' must be specified.</param>
 		/// <param name="logger"></param>
-		public KafkaProducer(ProducerConfig producerConfig, ILogger logger = null)
+		public KafkaProducer(ProducerConfig producerConfig, ILogger<KafkaProducer> logger = null)
 		{
 			_logger = logger;
 			if (string.IsNullOrWhiteSpace(producerConfig?.BootstrapServers))
@@ -79,7 +79,7 @@ namespace Rebus.Kafka
 				?.GetValue(dependentKafkaProducer) as Producer<Null, string>;
 			_producer = new DependentProducerBuilder<Null, string>(dependentProducer.Handle).Build();
 			_logger = typeof(KafkaProducer).GetField(nameof(_logger), BindingFlags.Instance | BindingFlags.NonPublic)
-				?.GetValue(dependentKafkaProducer) as ILogger;
+				?.GetValue(dependentKafkaProducer) as ILogger<KafkaProducer>;
 		}
 
 		/// <summary>Send a message to a specific topic</summary>

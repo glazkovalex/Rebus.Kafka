@@ -4,7 +4,9 @@
 
 ##### Provides a [Apache Kafka](https://kafka.apache.org/) transport implementation for [Rebus](https://github.com/rebus-org/Rebus).
 ![](https://raw.githubusercontent.com/glazkovalex/Rebus.Kafka/master/image.png)
-#### Using Rebus.Kafka:
+#### Getting started Rebus.Kafka:
+1. Implement [Getting started for Rebus](https://github.com/rebus-org/Rebus#getting-started)
+2. Add transport as UseKafka
 ```csharp
 builder.RegisterRebus((configurer, context) => configurer
 	.Transport(t => t.UseKafka("localhost:9092", "InputQueueName", "groupName"))
@@ -64,6 +66,10 @@ if (!Library.IsLoaded)
 
 - Due to the features of Kafka, after subscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. With default settings, messages that came at this time are stored in Kafka, but they will be missed and will not get for new customers. An alternative to this is the mass reception of previously processed messages, which in general is even worse. What are the options for overcoming this, read the Apache Kafka documentation.
 In the simplest sense, this explanation means, that you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario is of course implemented in the Apache Kafka transport, but will work very slowly. **We recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast and reliable**.
+
+#### ToDo:
+- Add configures Rebus to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages)
+- Add configures Rebus to use Apache Kafka to transport messages with two consumers. One in the group for scalable processing of messages from the incoming queue, and the other in the unique group for receiving integration events.
 
 ---
 If you have any recommendations or comments, I will be glad to hear.
