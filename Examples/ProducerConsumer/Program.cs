@@ -1,13 +1,13 @@
-﻿using System;
-using System.Diagnostics;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Confluent.Kafka;
+﻿using Confluent.Kafka;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Rebus.Kafka;
 using Serilog;
+using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ProducerConsumer
 {
@@ -15,22 +15,21 @@ namespace ProducerConsumer
 	{
 		static void Main(string[] args)
 		{
-			var globalScope = ConfigureServices();
-
-			var loggerFactory = globalScope.ServiceProvider.GetRequiredService<ILoggerFactory>();
-			ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
-
 			CancellationTokenSource cts = new CancellationTokenSource();
 			Console.CancelKeyPress += (_, e) =>
 			{
 				e.Cancel = true; // prevent the process from terminating.
 				cts.Cancel();
 			};
+			var globalScope = ConfigureServices();
+			var loggerFactory = globalScope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+			ILogger<KafkaProducer> loggerProducer = loggerFactory.CreateLogger<KafkaProducer>();
+			var loggerConsumer = loggerFactory.CreateLogger<KafkaConsumer>();
 
-			using (var producer_ = new KafkaProducer(_kafkaEndpoint, logger))
+			using (var producer_ = new KafkaProducer(_kafkaEndpoint, loggerProducer))
 			using (var producer = new KafkaProducer(producer_)) // for test dependentKafkaProducer 
-			using (KafkaConsumer consumer = new KafkaConsumer(_kafkaEndpoint, null, logger)
-				, consumer2 = new KafkaConsumer(_kafkaEndpoint, null, logger))
+			using (KafkaConsumer consumer = new KafkaConsumer(_kafkaEndpoint, loggerConsumer)
+				, consumer2 = new KafkaConsumer(_kafkaEndpoint, loggerConsumer))
 			{
 				consumer.Consume(new[] { bTopicNameResp }
 					, message => Console.WriteLine($"Boy name {message.Value} is recommended"), cts.Token);

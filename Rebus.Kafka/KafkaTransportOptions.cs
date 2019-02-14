@@ -85,6 +85,5 @@ namespace Rebus.Kafka
 				.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 		}
-		// ToDo: Add configures Rebus to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages)
 	}
 }

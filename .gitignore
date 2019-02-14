@@ -16,3 +16,6 @@
 /Examples/BusScaleoutWitchDetailedConfiguration
 /Examples/ProducerConsumer/bin/Release/netcoreapp2.2
 /TestResults/63ffdcc2-9d18-48d2-b3ad-9bc28d9a6867/Alexandr_SERVER 2019-02-14 01_24_45.coverage
+*.user
+bin
+obj

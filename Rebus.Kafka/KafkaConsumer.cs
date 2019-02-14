@@ -12,7 +12,7 @@ namespace Rebus.Kafka
 	/// <summary>Example message consumer</summary>
 	public sealed class KafkaConsumer : IDisposable
 	{
-		private readonly ILogger _logger;
+		private readonly ILogger<KafkaConsumer> _logger;
 		private IEnumerable<string> _topics;
 		private readonly Consumer<Null, string> _consumer;
 
@@ -20,7 +20,7 @@ namespace Rebus.Kafka
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
 		/// <param name="groupId">Id of group</param>
 		/// <param name="logger"></param>
-		public KafkaConsumer(string brokerList, string groupId = null, ILogger logger = null)
+		public KafkaConsumer(string brokerList, string groupId = null, ILogger<KafkaConsumer> logger = null)
 		{
 			_logger = logger;
 			if (string.IsNullOrWhiteSpace(brokerList))
@@ -60,6 +60,12 @@ namespace Rebus.Kafka
 				.Build();
 		}
 
+		/// <summary>Creates new instance <see cref="KafkaConsumer"/>.</summary>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		/// <param name="logger"></param>
+		/// <param name="groupId">Id of group</param>
+		public KafkaConsumer(string brokerList, ILogger<KafkaConsumer> logger = null, string groupId = null) :this(brokerList, groupId, logger) { }
+
 		/// <summary>Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
 		/// all the parameters of the consumer used in this transport.</summary>
 		/// <param name="consumerConfig">A collection of librdkafka configuration parameters
@@ -69,7 +75,7 @@ namespace Rebus.Kafka
 		///     At a minimum, 'bootstrap.servers' and 'group.id' must be
 		///     specified.</param>
 		/// <param name="logger"></param>
-		public KafkaConsumer(ConsumerConfig consumerConfig, ILogger logger = null)
+		public KafkaConsumer(ConsumerConfig consumerConfig, ILogger<KafkaConsumer> logger = null)
 		{
 			_logger = logger;
 			if (string.IsNullOrWhiteSpace(consumerConfig?.BootstrapServers))
