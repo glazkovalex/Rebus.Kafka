@@ -38,8 +38,6 @@ namespace Rebus.Kafka.Tests
 					.Routing(r => r.TypeBased().Map<Message>(nameof(SimpleTests)))
 					.Start();
 
-				Task.Delay(5000).Wait(); // for wait complete rebalance
-
 				var sendAmount = 0;
 				var messages = Enumerable.Range(1, MessageCount)
 					.Select(i =>
@@ -72,7 +70,6 @@ namespace Rebus.Kafka.Tests
 			using (IBus bus = container.Resolve<IBus>())
 			{
 				bus.Subscribe<Message>().Wait();
-				await Task.Delay(5000); // for wait complete rebalance
 				var sendAmount = 0;
 				var messages = Enumerable.Range(1, MessageCount)
 					.Select(i =>

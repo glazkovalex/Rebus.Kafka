@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,9 +13,127 @@ namespace Rebus.Kafka
 	/// <summary>Example message consumer</summary>
 	public sealed class KafkaConsumer : IDisposable
 	{
+		/// <summary>Subscribes to incoming messages</summary>
+		/// <param name="topics">Topics to subscribe to using the given message handler</param>
+		/// <param name="action">Incoming message handler</param>
+		/// <param name="cancellationToken"></param>
+		/// <returns></returns>
+		[Obsolete]
+		public Task Consume(IEnumerable<string> topics, Action<Message<Null, string>> action, CancellationToken cancellationToken)
+		{
+			_topics = topics;
+
+			Task task = Task.Factory.StartNew(() =>
+			{
+				_consumer.Subscribe(topics);
+				try
+				{
+					while (!cancellationToken.IsCancellationRequested)
+					{
+						var consumeResult = _consumer.Consume(cancellationToken);
+						if (consumeResult.IsPartitionEOF)
+						{
+							//_logger?.LogInformation($"Reached end of topic {consumeResult.Topic}, partition {consumeResult.Partition}.");
+							continue;
+						}
+
+						action(consumeResult.Message);
+						//_logger?.LogInformation($"Received message at {consumeResult.TopicPartitionOffset}: {consumeResult.Value}");
+
+						if (consumeResult.Offset % _commitPeriod == 0)
+						{
+							// The Commit method sends a "commit offsets" request to the Kafka
+							// cluster and synchronously waits for the response. This is very
+							// slow compared to the rate at which the consumer is capable of
+							// consuming messages. A high performance application will typically
+							// commit offsets relatively infrequently and be designed handle
+							// duplicate messages in the event of failure.
+							_consumer.Commit(consumeResult);
+						}
+					}
+				}
+				catch (ConsumeException e)
+				{
+					_logger?.LogError($"Consume error: {e.Error}");
+				}
+				finally
+				{
+					_consumer.Close();
+				}
+			},
+				cancellationToken,
+				TaskCreationOptions.LongRunning,
+				TaskScheduler.Default
+			);
+			task.ConfigureAwait(false);
+			return task;
+		}
+
+		public IObservable<Message<Null, string>> Consume(IEnumerable<string> topics)
+		{
+			_topics = topics;
+			var observable = Observable.Create<Message<Null, string>>((observer, cancellationToken) =>
+			{
+				var task = Task.Factory.StartNew(
+					() =>
+					{
+						_consumer.Subscribe(topics);
+						try
+						{
+							while (!cancellationToken.IsCancellationRequested)
+							{
+
+								var consumeResult = _consumer.Consume(cancellationToken);
+								if (consumeResult.IsPartitionEOF)
+								{
+									//_logger?.LogInformation($"Reached end of topic {consumeResult.Topic}, partition {consumeResult.Partition}.");
+									continue;
+								}
+
+								observer.OnNext(consumeResult.Message);
+								//_logger?.LogInformation($"Received message at {consumeResult.TopicPartitionOffset}: {consumeResult.Value}");
+
+								if (consumeResult.Offset % _commitPeriod == 0)
+								{
+									// The Commit method sends a "commit offsets" request to the Kafka
+									// cluster and synchronously waits for the response. This is very
+									// slow compared to the rate at which the consumer is capable of
+									// consuming messages. A high performance application will typically
+									// commit offsets relatively infrequently and be designed handle
+									// duplicate messages in the event of failure.
+									_consumer.Commit(consumeResult);
+								}
+							}
+						}
+						catch (ConsumeException e)
+						{
+							_logger?.LogError($"Consume error: {e.Error}");
+							observer.OnError(e);
+						}
+						finally
+						{
+							_consumer.Close();
+						}
+						observer.OnCompleted();
+					},
+					cancellationToken,
+					TaskCreationOptions.LongRunning,
+					TaskScheduler.Default);
+				task.ConfigureAwait(false);
+				return task;
+			});
+			return observable;
+		}
+
+		public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken) => _consumer.Commit(cancellationToken);
+		public Consumer<Null, string> Consumer => _consumer;
+
+		#region Скучное
+
+		private readonly Consumer<Null, string> _consumer;
+		private readonly int _commitPeriod = 5;
 		private readonly ILogger<KafkaConsumer> _logger;
 		private IEnumerable<string> _topics;
-		private readonly Consumer<Null, string> _consumer;
 
 		/// <summary>Creates new instance <see cref="KafkaConsumer"/>.</summary>
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
@@ -64,7 +183,7 @@ namespace Rebus.Kafka
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
 		/// <param name="logger"></param>
 		/// <param name="groupId">Id of group</param>
-		public KafkaConsumer(string brokerList, ILogger<KafkaConsumer> logger = null, string groupId = null) :this(brokerList, groupId, logger) { }
+		public KafkaConsumer(string brokerList, ILogger<KafkaConsumer> logger = null, string groupId = null) : this(brokerList, groupId, logger) { }
 
 		/// <summary>Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
 		/// all the parameters of the consumer used in this transport.</summary>
@@ -93,77 +212,9 @@ namespace Rebus.Kafka
 				.SetValueDeserializer(Deserializers.Utf8)
 				.SetLogHandler(OnLog)
 				.SetErrorHandler(OnError)
-				.SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
+				.SetStatisticsHandler((_, json) => _logger.LogInformation($"Statistics: {json}"))
 				.SetRebalanceHandler(OnRebalance)
 				.Build();
-		}
-
-		public Consumer<Null, string> Consumer => _consumer;
-
-		/// <summary>Subscribes to incoming messages</summary>
-		/// <param name="topics">Topics to subscribe to using the given message handler</param>
-		/// <param name="action">Incoming message handler</param>
-		/// <param name="cancellationToken"></param>
-		/// <returns></returns>
-		public Task Consume(IEnumerable<string> topics, Action<Message<Null, string>> action, CancellationToken cancellationToken)
-		{
-			_topics = topics;
-			const int commitPeriod = 5;
-
-			Task task = Task.Factory.StartNew(() =>
-				{
-					_consumer.Subscribe(topics);
-					while (!cancellationToken.IsCancellationRequested)
-					{
-						try
-						{
-							var consumeResult = _consumer.Consume(cancellationToken);
-							if (consumeResult.IsPartitionEOF)
-							{
-								//_logger?.LogInformation($"Reached end of topic {consumeResult.Topic}, partition {consumeResult.Partition}.");
-								continue;
-							}
-
-							action(consumeResult.Message);
-							//_logger?.LogInformation($"Received message at {consumeResult.TopicPartitionOffset}: {consumeResult.Value}");
-
-							if (consumeResult.Offset % commitPeriod == 0)
-							{
-								// The Commit method sends a "commit offsets" request to the Kafka
-								// cluster and synchronously waits for the response. This is very
-								// slow compared to the rate at which the consumer is capable of
-								// consuming messages. A high performance application will typically
-								// commit offsets relatively infrequently and be designed handle
-								// duplicate messages in the event of failure.
-								_consumer.Commit(consumeResult);
-							}
-						}
-						catch (ConsumeException e)
-						{
-							_logger?.LogError($"Consume error: {e.Error}");
-						}
-					}
-					_consumer.Close();
-				},
-				cancellationToken,
-				TaskCreationOptions.LongRunning,
-				TaskScheduler.Default
-			);
-			task.ConfigureAwait(false);
-			return task;
-		}
-
-		private readonly EventHandler<Message<Null, string>> _onMessage;
-
-		//public async Task CommitAsync(Message<Null, string> message) => await _consumer.CommitAsync(message);
-
-		public void Dispose()
-		{
-			if (_consumer != null)
-			{
-				_consumer.Unsubscribe();
-				_consumer.Dispose();
-			}
 		}
 
 		private void OnLog(object sender, LogMessage logMessage)
@@ -207,5 +258,16 @@ namespace Rebus.Kafka
 				// consumer.Unassign()
 			}
 		}
+
+		public void Dispose()
+		{
+			if (_consumer != null)
+			{
+				_consumer.Unsubscribe();
+				_consumer.Dispose();
+			}
+		}
+
+		#endregion
 	}
 }

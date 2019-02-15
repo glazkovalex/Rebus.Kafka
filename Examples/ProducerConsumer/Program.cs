@@ -31,10 +31,10 @@ namespace ProducerConsumer
 			using (KafkaConsumer consumer = new KafkaConsumer(_kafkaEndpoint, loggerConsumer)
 				, consumer2 = new KafkaConsumer(_kafkaEndpoint, loggerConsumer))
 			{
-				consumer.Consume(new[] { bTopicNameResp }
-					, message => Console.WriteLine($"Boy name {message.Value} is recommended"), cts.Token);
-				consumer2.Consume(new[] { gTopicNameResp }
-					, message => Console.WriteLine($"Girl name {message.Value} is recommended"), cts.Token);
+				consumer.Consume(new[] { bTopicNameResp })
+					.Subscribe(message => Console.WriteLine($"Boy name {message.Value} is recommended"), cts.Token);
+				consumer2.Consume(new[] { gTopicNameResp })
+					.Subscribe(message => Console.WriteLine($"Girl name {message.Value} is recommended"), cts.Token);
 
 				Task.Delay(1000).Wait(cts.Token); // for wait complete rebalance
 

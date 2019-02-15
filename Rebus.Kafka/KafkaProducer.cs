@@ -8,7 +8,8 @@ using System.Threading.Tasks;
 
 namespace Rebus.Kafka
 {
-	/// <summary>Example message producer</summary>
+	/// <summary lang="en-US">Example message producer</summary>
+	/// <summary lang="ru-RU">Пример поставщика сообщений</summary>
 	public class KafkaProducer : IDisposable
 	{
 		private readonly ILogger<KafkaProducer> _logger;
@@ -63,7 +64,7 @@ namespace Rebus.Kafka
 				.SetKeySerializer(Serializers.Null)
 				.SetValueSerializer(Serializers.Utf8)
 				.SetLogHandler(OnLog)
-				.SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
+				.SetStatisticsHandler((_, json) => _logger.LogInformation($"Statistics: {json}"))
 				.SetErrorHandler(OnError)
 				.Build();
 		}

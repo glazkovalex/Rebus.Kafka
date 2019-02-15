@@ -29,6 +29,7 @@ namespace Scaleout.Consumers
 				Console.WriteLine($"If your Kafka \"num.partitions\" > 1 to start the second instance of \"Scaleout.Consumers\"");
 				Console.WriteLine("Waiting for messages. Press any key to exit.");
 				Console.ReadKey();
+				bus.Unsubscribe<TestMessage>().Wait(); // only for test
 			}
 		}
 		static readonly string _kafkaEndpoint = "192.168.0.166:9092";

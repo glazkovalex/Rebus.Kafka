@@ -1,6 +1,7 @@
 ﻿using Confluent.Kafka;
 using Confluent.Kafka.Serdes;
 using Rebus.Bus;
+using Rebus.Exceptions;
 using Rebus.Kafka.Serialization;
 using Rebus.Logging;
 using Rebus.Messages;
@@ -9,6 +10,7 @@ using Rebus.Threading;
 using Rebus.Transport;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,9 +23,16 @@ namespace Rebus.Kafka
 	{
 		public void CreateQueue(string address)
 		{
-			_knownRoutes.TryAdd(address, address);
-			// auto create topics should be enabled
-			_consumer.Subscribe(_knownRoutes.Values);
+			try
+			{
+				_subscriptions.TryAdd(address, new[] { address });
+				// auto create topics should be enabled
+				_queueConsumer.Subscribe(_subscriptions.SelectMany(a => a.Value));
+			}
+			catch (Exception e)
+			{
+				throw new RebusApplicationException(e, $"Queue declaration for '{address}' failed");
+			}
 		}
 
 		const int CommitPeriod = 5; // ToDo: Добавить в параметры
@@ -58,7 +67,7 @@ namespace Rebus.Kafka
 			{
 				try
 				{
-					consumeResult = _consumer.Consume(cancellationToken);
+					consumeResult = _queueConsumer.Consume(cancellationToken);
 					resume = consumeResult.IsPartitionEOF;
 					if (resume)
 					{
@@ -74,7 +83,7 @@ namespace Rebus.Kafka
 						// consuming messages. A high performance application will typically
 						// commit offsets relatively infrequently and be designed handle
 						// duplicate messages in the event of failure.
-						_consumer.Commit(consumeResult);
+						_queueConsumer.Commit(consumeResult);
 					}
 				}
 				catch (OperationCanceledException e)
@@ -94,6 +103,7 @@ namespace Rebus.Kafka
 		/// <summary>Gets the input queue name for this transport</summary>
 		public string Address { get; }
 
+		/// <inheritdoc />
 		public Task<string[]> GetSubscriberAddresses(string topic)
 		{
 			return Task.FromResult(new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
@@ -101,29 +111,34 @@ namespace Rebus.Kafka
 
 		public Task RegisterSubscriber(string topic, string subscriberAddress)
 		{
-			_knownRoutes.TryAdd(topic, $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}");
-			_consumer.Subscribe(_knownRoutes.Values);
-			return Task.CompletedTask;
+			_subscriptions.TryAdd(topic, new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
+			var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
+			var tcs = new TaskCompletionSource<bool>();
+			//CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
+			_waitAssigned.TryAdd(topics, new KeyValuePair<string, TaskCompletionSource<bool>>(topic, tcs));
+			_queueConsumer.Subscribe(topics);
+			return tcs.Task;
 		}
 
 		public Task UnregisterSubscriber(string topic, string subscriberAddress)
 		{
-			_knownRoutes.TryRemove(topic, out var _);
-			var topics = _knownRoutes.Values;
-			//try
+			var toUnregister = _subscriptions.SelectMany(a => a.Value).ToArray();
+			_subscriptions.TryRemove(topic, out _);
+			var topics = _subscriptions.SelectMany(a => a.Value);
+			try
 			{
-				_consumer.Commit(CancellationToken.None);
+				_queueConsumer.Commit(_cancellationToken);
 			}
-			//catch (Exception) { /* ignored */ }
+			catch (Exception) { /* ignored */ }
 
-			if (topics.Count > 0)
-			{
-				_consumer.Unsubscribe();
-				_consumer.Subscribe(topics);
-			}
+			var tcs = new TaskCompletionSource<bool>();
+			//CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
+			_waitRevoked.TryAdd(toUnregister, new KeyValuePair<string, TaskCompletionSource<bool>>(topic, tcs));
+			if (topics.Any())
+				_queueConsumer.Subscribe(topics);
 			else
-				_consumer.Close();
-			return Task.CompletedTask;
+				_queueConsumer.Close();
+			return tcs.Task;
 		}
 
 		/// <summary>Always returns true because Kafka topics and subscriptions are global</summary>
@@ -160,7 +175,7 @@ namespace Rebus.Kafka
 			// will be used automatically (where available). The default deserializer for string
 			// is UTF8. The default deserializer for Ignore returns null for all input data
 			// (including non-null data).
-			_consumer = new ConsumerBuilder<Ignore, TransportMessage>(_consumerConfig)
+			_queueConsumer = new ConsumerBuilder<Ignore, TransportMessage>(_consumerConfig)
 				.SetKeyDeserializer(Deserializers.Ignore)
 				.SetValueDeserializer(new TransportMessageDeserializer())
 				.SetLogHandler(ConsumerOnLog)
@@ -168,7 +183,7 @@ namespace Rebus.Kafka
 				.SetStatisticsHandler(ConsumerOnStatistics)
 				.SetRebalanceHandler(ConsumerOnRebalance)
 				.Build();
-			_consumer.Subscribe(_knownRoutes.Values);
+			_queueConsumer.Subscribe(_subscriptions.SelectMany(a => a.Value));
 		}
 
 		#region logging
@@ -220,13 +235,35 @@ namespace Rebus.Kafka
 		{
 			if (evnt.IsAssignment)
 			{
-				_log.Info($"Assigned partitions: [{string.Join(", ", evnt.Partitions)}]");
+				_log.Debug($"Assigned partitions: [{string.Join(", ", evnt.Partitions)}]");
+				if (_waitAssigned.Count > 0)
+				{
+					var topics = evnt.Partitions.Select(p => p.Topic);
+					var key = _waitAssigned.Keys.FirstOrDefault(k => !k.Except(topics).Any());
+					if (key != null)
+					{
+						_waitAssigned.TryRemove(key, out var task);
+						task.Value.SetResult(true);
+						_log.Info($"Subscribe on \"{task.Key}\"");
+					}
+				}
 				// possibly override the default partition assignment behavior:
 				// consumer.Assign(...) 
 			}
 			else
 			{
-				_log.Info($"Revoked partitions: [{string.Join(", ", evnt.Partitions)}]");
+				_log.Debug($"Revoked partitions: [{string.Join(", ", evnt.Partitions)}]");
+				if (_waitRevoked.Count > 0)
+				{
+					var topics = evnt.Partitions.Select(p => p.Topic);
+					var key = _waitRevoked.Keys.FirstOrDefault(k => !k.Except(topics).Any());
+					if (key != null)
+					{
+						_waitRevoked.TryRemove(key, out var task);
+						task.Value.SetResult(true);
+						_log.Info($"Unsubscribe from \"{task.Key}\"");
+					}
+				}
 				// consumer.Unassign()
 			}
 		}
@@ -245,12 +282,18 @@ namespace Rebus.Kafka
 
 		private Producer<Ignore, TransportMessage> _producer;
 		private readonly ProducerConfig _producerConfig;
-		private Consumer<Ignore, TransportMessage> _consumer;
+		private Consumer<Ignore, TransportMessage> _queueConsumer;
 		private readonly ConsumerConfig _consumerConfig;
 
-		private readonly ConcurrentDictionary<string, string> _knownRoutes;
+		private readonly ConcurrentDictionary<string, string[]> _subscriptions;
 		private readonly string _magicSubscriptionPrefix = "---Topic---.";
 		private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
+		readonly CancellationToken _cancellationToken;
+
+		readonly ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>> _waitAssigned
+			= new ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>>();
+		readonly ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>> _waitRevoked
+			= new ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>>();
 
 		/// <summary>Creates new instance <see cref="KafkaTransport"/>. Performs a simplified
 		/// configuration of the parameters of the manufacturer and the consumer used in this transport.</summary>
@@ -259,8 +302,9 @@ namespace Rebus.Kafka
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
 		/// <param name="inputQueueName">name of input queue</param>
 		/// <param name="groupId">Id of group</param>
-		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory,
-			string brokerList, string inputQueueName, string groupId = null)
+		/// <param name="cancellationToken"></param>
+		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
+			, string inputQueueName, string groupId = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			if (string.IsNullOrWhiteSpace(brokerList))
 				throw new NullReferenceException(nameof(brokerList));
@@ -270,9 +314,10 @@ namespace Rebus.Kafka
 			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
 				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
 
-			_knownRoutes = new ConcurrentDictionary<string, string>();
-			_knownRoutes.TryAdd(inputQueueName, inputQueueName);
+			_subscriptions = new ConcurrentDictionary<string, string[]>();
+			_subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
 			Address = inputQueueName;
+			_cancellationToken = cancellationToken;
 			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
 			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 
@@ -328,8 +373,9 @@ namespace Rebus.Kafka
 		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
 		///     At a minimum, 'bootstrap.servers' and 'group.id' must be
 		///     specified.</param>
-		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory,
-			string brokerList, string inputQueueName, ProducerConfig producerConfig, ConsumerConfig consumerConfig)
+		/// <param name="cancellationToken"></param>
+		public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList, string inputQueueName
+			, ProducerConfig producerConfig, ConsumerConfig consumerConfig, CancellationToken cancellationToken = default(CancellationToken))
 		{
 			if (string.IsNullOrWhiteSpace(brokerList))
 				throw new NullReferenceException(nameof(brokerList));
@@ -341,12 +387,13 @@ namespace Rebus.Kafka
 			_producerConfig = producerConfig ?? throw new NullReferenceException(nameof(producerConfig));
 			_producerConfig.BootstrapServers = brokerList;
 			_consumerConfig = consumerConfig ?? throw new NullReferenceException(nameof(consumerConfig));
+			_cancellationToken = cancellationToken;
 			_consumerConfig.BootstrapServers = brokerList;
 			if (string.IsNullOrEmpty(_consumerConfig.GroupId))
 				_consumerConfig.GroupId = Guid.NewGuid().ToString("N");
 
-			_knownRoutes = new ConcurrentDictionary<string, string>();
-			_knownRoutes.TryAdd(inputQueueName, inputQueueName);
+			_subscriptions = new ConcurrentDictionary<string, string[]>();
+			_subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
 			Address = inputQueueName;
 			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
 			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
@@ -359,11 +406,11 @@ namespace Rebus.Kafka
 			_producer?.Dispose();
 			try
 			{
-				_consumer.Commit();
+				_queueConsumer.Commit();
 			}
 			catch (Exception) { /* ignored */ }
-			_consumer?.Close();
-			_consumer?.Dispose();
+			_queueConsumer?.Close();
+			_queueConsumer?.Dispose();
 		}
 
 		#endregion

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using Confluent.Kafka;
 using Rebus.Config;
 using Rebus.Logging;
@@ -32,7 +33,9 @@ namespace Rebus.Kafka
 							$"You must supply a valid value for topicPrefix");
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, groupId);
+					var cancellationToken = c.Get<CancellationToken>();
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory
+						, brokerList, inputQueueName, groupId, cancellationToken);
 				});
 
 			// Register implementation of the Transport as ITransport
@@ -74,7 +77,9 @@ namespace Rebus.Kafka
 							$"You must supply a valid value for topicPrefix");
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, consumerConfig);
+					var cancellationToken = c.Get<CancellationToken>();
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
+						, inputQueueName, producerConfig, consumerConfig, cancellationToken);
 				});
 
 			// Register implementation of the Transport as ITransport

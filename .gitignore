@@ -19,3 +19,4 @@
 *.user
 bin
 obj
+/Rebus.Kafka/Rebus.Kafka.xml

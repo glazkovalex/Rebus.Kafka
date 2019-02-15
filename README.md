@@ -64,8 +64,7 @@ if (!Library.IsLoaded)
 	Confluent.Kafka.Library.Load(pathToLibrd);
 ```
 
-- Due to the features of Kafka, after subscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. With default settings, messages that came at this time are stored in Kafka, but they will be missed and will not get for new customers. An alternative to this is the mass reception of previously processed messages, which in general is even worse. What are the options for overcoming this, read the Apache Kafka documentation.
-In the simplest sense, this explanation means, that you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario is of course implemented in the Apache Kafka transport, but will work very slowly. **We recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast and reliable**.
+- Due to the features of Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario is of course implemented in the Apache Kafka transport, but will work very slowly. **I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast**.
 
 ### ToDo:
 - Add configures Rebus to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages)

@@ -64,7 +64,6 @@ namespace Scaleout.Producer
 			using (IBus bus = container.Resolve<IBus>())
 			{
 				bus.Subscribe<Confirmation>().Wait();
-				Task.Delay(5000).Wait(); // for wait complete rebalance
 
 				char key;
 				do
@@ -82,9 +81,11 @@ namespace Scaleout.Producer
 					Console.WriteLine("Press any key to exit or 'r' to repeat.");
 					key = Console.ReadKey().KeyChar;
 				} while (key == 'r' || key == 'к');
+
+				bus.Unsubscribe<Confirmation>().Wait(); // only for test
 			}
 		}
 		static readonly string _kafkaEndpoint = "192.168.0.166:9092";
-		public static readonly int ItemCount = 100;
+		public static readonly int ItemCount = 10;
 	}
 }
