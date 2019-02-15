@@ -5,6 +5,8 @@ using Rebus.Kafka.Serialization;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Subscriptions;
+using Rebus.Threading;
+using Rebus.Transport;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -18,6 +20,50 @@ namespace Rebus.Kafka.Core
 	/// <summary>Implementation of Apache Kafka SubscriptionStorage</summary>
 	public class KafkaSubscriptionStorage : ISubscriptionStorage, IInitializable, IDisposable
 	{
+		/// <summary>
+		/// Receives the next message (if any) from the transport's input queue <see cref="P:Rebus.Transport.ITransport.Address" />
+		/// </summary>
+		internal Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+		{
+			bool resume = false;
+			ConsumeResult<Ignore, TransportMessage> consumeResult = null;
+			do
+			{
+				try
+				{
+					consumeResult = _consumer.Consume(cancellationToken);
+					resume = consumeResult.IsPartitionEOF;
+					if (resume)
+					{
+						//_logger?.LogInformation($"Reached end of topic {consumeResult.Topic}, partition {consumeResult.Partition}.");
+						continue;
+					}
+
+					if (consumeResult.Offset % CommitPeriod == 0)
+					{
+						// The Commit method sends a "commit offsets" request to the Kafka
+						// cluster and synchronously waits for the response. This is very
+						// slow compared to the rate at which the consumer is capable of
+						// consuming messages. A high performance application will typically
+						// commit offsets relatively infrequently and be designed handle
+						// duplicate messages in the event of failure.
+						_consumer.Commit(consumeResult, _cancellationToken);
+					}
+				}
+				catch (OperationCanceledException e)
+				{
+					_log?.Info($"Consume warning: {e.Message}");
+					resume = false;
+					consumeResult = null;
+				}
+				catch (ConsumeException e)
+				{
+					_log?.Error($"Consume error: {e.Error}");
+				}
+			} while (resume);
+			return Task.FromResult(consumeResult?.Value);
+		}
+
 		/// <inheritdoc />
 		public Task<string[]> GetSubscriberAddresses(string topic)
 		{
@@ -56,6 +102,12 @@ namespace Rebus.Kafka.Core
 			else
 				_consumer.Close();
 			return tcs.Task;
+		}
+
+		internal void CreateQueue(string address)
+		{
+			_subscriptions.TryAdd(address, new[] { address });
+			_consumer.Subscribe(_subscriptions.SelectMany(a => a.Value));
 		}
 
 		/// <inheritdoc />
@@ -106,7 +158,7 @@ namespace Rebus.Kafka.Core
 		}
 
 		private void ConsumerOnStatistics(Consumer<Ignore, TransportMessage> sender, string json)
-			=> Console.WriteLine($"Consumer statistics: {json}");
+			=> _log.Info($"Consumer statistics: {json}");
 
 		private void ConsumerOnError(Consumer<Ignore, TransportMessage> sender, Error error)
 		{
@@ -129,13 +181,36 @@ namespace Rebus.Kafka.Core
 		{
 			if (evnt.IsAssignment)
 			{
-				_log.Info($"Assigned partitions: [{string.Join(", ", evnt.Partitions)}]");
+				_log.Debug($"Assigned partitions: [{string.Join(", ", evnt.Partitions)}]");
+				if (_waitAssigned.Count > 0)
+				{
+					var topics = evnt.Partitions.Select(p => p.Topic);
+					var key = _waitAssigned.Keys.FirstOrDefault(k => !k.Except(topics).Any());
+					if (key != null)
+					{
+						_waitAssigned.TryRemove(key, out var task);
+						task.Value.SetResult(true);
+						_log.Info($"Subscribe on \"{task.Key}\"");
+					}
+				}
 				// possibly override the default partition assignment behavior:
 				// consumer.Assign(...) 
 			}
 			else
 			{
-				_log.Info($"Revoked partitions: [{string.Join(", ", evnt.Partitions)}]");
+				_log.Debug($"Revoked partitions: [{string.Join(", ", evnt.Partitions)}]");
+				if (_waitRevoked.Count > 0)
+				{
+					var topics = evnt.Partitions.Select(p => p.Topic);
+					var key = _waitRevoked.Keys.FirstOrDefault(k => !k.Except(topics).Any());
+
+					if (key != null)
+					{
+						_waitRevoked.TryRemove(key, out var task);
+						task.Value.SetResult(true);
+						_log.Info($"Unsubscribe from \"{task.Key}\"");
+					}
+				}
 				// consumer.Unassign()
 			}
 		}
@@ -149,9 +224,12 @@ namespace Rebus.Kafka.Core
 			return _topicRegex.Replace(topic, "_");
 		}
 
+		const int CommitPeriod = 5; // ToDo: Добавить в параметры
 		private Consumer<Ignore, TransportMessage> _consumer;
 		private ConsumerConfig _config;
 		readonly ILog _log;
+		readonly IAsyncTaskFactory _asyncTaskFactory;
+
 		private readonly ConcurrentDictionary<string, string[]> _subscriptions = new ConcurrentDictionary<string, string[]>();
 		private readonly string _magicSubscriptionPrefix = "---Topic---.";
 		private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
@@ -162,15 +240,66 @@ namespace Rebus.Kafka.Core
 		readonly ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>> _waitRevoked
 			= new ConcurrentDictionary<IEnumerable<string>, KeyValuePair<string, TaskCompletionSource<bool>>>();
 
-		internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, ConsumerConfig config
-			, CancellationToken cancellationToken = default(CancellationToken))
+		private readonly object _subscriptionLockObj = new object();
+
+		internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory
+			, string brokerList, string inputQueueName, string groupId = null, CancellationToken cancellationToken = default(CancellationToken))
 		{
-			_config = config ?? throw new NullReferenceException(nameof(config));
-			if (string.IsNullOrWhiteSpace(_config.BootstrapServers))
-				throw new NullReferenceException(nameof(_config.BootstrapServers));
-			_config.GroupId = Guid.NewGuid().ToString("N");
-			_cancellationToken = cancellationToken;
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
+			var maxNameLength = 249;
+			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
+				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
+				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
+
+			_config = new ConsumerConfig
+			{
+				BootstrapServers = brokerList,
+				ApiVersionRequest = true,
+				GroupId = !string.IsNullOrEmpty(groupId) ? groupId : Guid.NewGuid().ToString("N"),
+				EnableAutoCommit = false,
+				FetchWaitMaxMs = 5,
+				FetchErrorBackoffMs = 5,
+				QueuedMinMessages = 1000,
+				SessionTimeoutMs = 6000,
+				//StatisticsIntervalMs = 5000,
+#if DEBUG
+				Debug = "msg",
+#endif
+				AutoOffsetReset = AutoOffsetReset.Latest,
+				EnablePartitionEof = true
+			};
+			_config.Set("fetch.message.max.bytes", "10240");
+
+			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 			_log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
+			_cancellationToken = cancellationToken;
+
+			_subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
+		}
+
+		internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
+			, string inputQueueName, ConsumerConfig config, CancellationToken cancellationToken = default(CancellationToken))
+		{
+			if (string.IsNullOrWhiteSpace(brokerList))
+				throw new NullReferenceException(nameof(brokerList));
+			var maxNameLength = 249;
+			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
+				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
+				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
+
+			_config = config ?? throw new NullReferenceException(nameof(config));
+			_config.BootstrapServers = brokerList;
+			if (string.IsNullOrEmpty(_config.GroupId))
+				_config.GroupId = Guid.NewGuid().ToString("N");
+
+			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
+			_log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
+			_cancellationToken = cancellationToken;
+
+			_subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
 		}
 
 		/// <inheritdoc />

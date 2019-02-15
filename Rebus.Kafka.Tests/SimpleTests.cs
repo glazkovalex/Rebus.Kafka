@@ -3,7 +3,7 @@ using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
-using Rebus.Logging;
+using Rebus.Kafka.Tests.Core;
 using Rebus.Routing.TypeBased;
 using System.Diagnostics;
 using System.Linq;
@@ -33,7 +33,7 @@ namespace Rebus.Kafka.Tests
 				});
 
 				Configure.With(adapter)
-					.Logging(l => l.ColoredConsole(minLevel: LogLevel.Info))
+					.Logging(l => l.Use(new TestOutputLoggerFactory(_output)))
 					.Transport(t => t.UseKafka(kafkaEndpoint, nameof(SimpleTests), "temp"))
 					.Routing(r => r.TypeBased().Map<Message>(nameof(SimpleTests)))
 					.Start();
@@ -61,7 +61,7 @@ namespace Rebus.Kafka.Tests
 			builder.RegisterInstance(_output).As<ITestOutputHelper>().SingleInstance();
 			builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
 			builder.RegisterRebus((configurer, context) => configurer
-				.Logging(l => l.ColoredConsole(LogLevel.Info))
+				.Logging(l => l.Use(new TestOutputLoggerFactory(_output)))
 				.Transport(t => t.UseKafka(kafkaEndpoint, nameof(SimpleTests)))
 				.Options(o => o.SetMaxParallelism(5))
 			);
@@ -69,7 +69,7 @@ namespace Rebus.Kafka.Tests
 			using (container = builder.Build())
 			using (IBus bus = container.Resolve<IBus>())
 			{
-				bus.Subscribe<Message>().Wait();
+				await bus.Subscribe<Message>();
 				var sendAmount = 0;
 				var messages = Enumerable.Range(1, MessageCount)
 					.Select(i =>
