@@ -13,7 +13,8 @@ builder.RegisterRebus((configurer, context) => configurer
 );
 ```
 
-With the version number 0.1.8 you can set all the parameters of the producer and the consumer used in the bus transport.
+The parameters for the producer and the consumer can be specified in detail.
+
 ```csharp
 var producerConfig = new ProducerConfig
 {
@@ -46,8 +47,6 @@ var consumerConfig = new ConsumerConfig
 	EnablePartitionEof = true
 };
 consumerConfig.Set("fetch.message.max.bytes", "10240");
-
-#endregion
 
 Configure.With(adapter)
 	.Transport(t => t.UseKafka("localhost:9092", "InputQueueName", producerConfig, consumerConfig))
