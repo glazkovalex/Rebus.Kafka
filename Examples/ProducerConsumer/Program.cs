@@ -36,8 +36,6 @@ namespace ProducerConsumer
 				consumer2.Consume(new[] { gTopicNameResp })
 					.Subscribe(message => Console.WriteLine($"Girl name {message.Value} is recommended"), cts.Token);
 
-				Task.Delay(1000).Wait(cts.Token); // for wait complete rebalance
-
 				string userInput;
 				var rnd = new Random();
 				do

@@ -69,6 +69,9 @@ namespace Rebus.Kafka
 			return task;
 		}
 
+		/// <summary>Get observable consumer for subscribe to incoming messages</summary>
+		/// <param name="topics">Topics to subscribe to using the given message handler</param>
+		/// <returns></returns>
 		public IObservable<Message<Null, string>> Consume(IEnumerable<string> topics)
 		{
 			_topics = topics;
