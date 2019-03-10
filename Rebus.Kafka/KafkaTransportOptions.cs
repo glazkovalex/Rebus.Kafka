@@ -1,11 +1,11 @@
-﻿using System;
-using System.Threading;
-using Confluent.Kafka;
+﻿using Confluent.Kafka;
 using Rebus.Config;
 using Rebus.Logging;
 using Rebus.Subscriptions;
 using Rebus.Threading;
 using Rebus.Transport;
+using System;
+using System.Threading;
 
 namespace Rebus.Kafka
 {
@@ -15,7 +15,7 @@ namespace Rebus.Kafka
 		const string AsbSubStorageText = "The Kafka transport was inserted as the subscriptions storage because it has native support for pub/sub messaging";
 
 		/// <summary>Configures Rebus to use Apache Kafka to transport messages. Performs a simplified
-		/// configuration of the parameters of the manufacturer and the consumer used in this transport.</summary>
+		/// configuration of the parameters of the producer and the consumer used in this transport.</summary>
 		/// <param name="configurer"></param>
 		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
 		/// <param name="inputQueueName">name of input queue</param>
@@ -89,6 +89,71 @@ namespace Rebus.Kafka
 			configurer
 				.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
+		}
+
+		/// <summary>Configures Rebus to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages).
+		/// Performs a simplified configuration of the parameters of the producer used in this transport.</summary>
+		/// <param name="configurer"></param>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
+		public static void UseKafkaAsOneWayClient(this StandardConfigurer<ITransport> configurer, string brokerList)
+		{
+			// Register implementation of the transport as ISubscriptionStorage as well
+			configurer
+				.OtherService<KafkaTransport>()
+				.Register(c =>
+				{
+					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
+					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
+					var cancellationToken = c.Get<CancellationToken>();
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory
+						, brokerList, null, null, cancellationToken);
+				});
+
+			// Register implementation of the Transport as ITransport
+			configurer.Register(c => c.Get<KafkaTransport>());
+
+			// Link the ISubscriberStorage to the transport
+			configurer
+				.OtherService<ISubscriptionStorage>()
+				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
+
+			OneWayClientBackdoor.ConfigureOneWayClient(configurer);
+		}
+
+		/// <summary>Detailed Rebus configuration to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages).
+		/// Allows you to configure all the parameters of the producerused in this transport.</summary>
+		/// <param name="configurer"></param>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.
+		/// Overwrites 'bootstrap' values.server', possibly specified via producerConfig</param>
+		/// <param name="producerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' must be specified.</param>
+		public static void UseKafkaAsOneWayClient(this StandardConfigurer<ITransport> configurer,
+			string brokerList, ProducerConfig producerConfig)
+		{
+			// Register implementation of the transport as ISubscriptionStorage as well
+			configurer
+				.OtherService<KafkaTransport>()
+				.Register(c =>
+				{
+					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
+					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
+					var cancellationToken = c.Get<CancellationToken>();
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
+						, null, producerConfig, null, cancellationToken);
+				});
+
+			// Register implementation of the Transport as ITransport
+			configurer.Register(c => c.Get<KafkaTransport>());
+
+			// Link the ISubscriberStorage to the transport
+			configurer
+				.OtherService<ISubscriptionStorage>()
+				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
+			
+			OneWayClientBackdoor.ConfigureOneWayClient(configurer);
 		}
 	}
 }

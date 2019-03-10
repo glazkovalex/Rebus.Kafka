@@ -22,7 +22,7 @@ namespace Rebus.Kafka
 		public void CreateQueue(string address)
 		{
 			// one-way client does not create any queues
-			if (Address == null)
+			if (Address == null || _queueSubscriptionStorage == null)
 				return;
 			_queueSubscriptionStorage.CreateQueue(address);
 		}
@@ -54,6 +54,7 @@ namespace Rebus.Kafka
 		/// <inheritdoc />
 		public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
 		{
+
 			if (Address == null)
 				throw new InvalidOperationException("This Kafka transport does not have an input queue - therefore, it is not possible to receive anything");
 			try
@@ -80,17 +81,21 @@ namespace Rebus.Kafka
 		/// <inheritdoc />
 		public async Task RegisterSubscriber(string topic, string subscriberAddress)
 		{
+			if (_queueSubscriptionStorage == null)
+				throw new NotSupportedException("This Kafka transport don't support subscribing because he's a one-way Client.");
 			await _queueSubscriptionStorage.RegisterSubscriber(topic, subscriberAddress).ConfigureAwait(false);
 		}
 
 		/// <inheritdoc />
 		public async Task UnregisterSubscriber(string topic, string subscriberAddress)
 		{
+			if (_queueSubscriptionStorage == null)
+				throw new NotSupportedException("This Kafka transport don't support subscribing because he's a one-way Client.");
 			await _queueSubscriptionStorage.UnregisterSubscriber(topic, subscriberAddress).ConfigureAwait(false);
 		}
 
 		/// <summary>Always returns true because Kafka topics and subscriptions are global</summary>
-		public bool IsCentralized => _queueSubscriptionStorage.IsCentralized;
+		public bool IsCentralized { get; } = true;
 
 		/// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
 		public void Initialize()
@@ -119,7 +124,7 @@ namespace Rebus.Kafka
 				_producer = builder.Build();
 			}
 
-			_queueSubscriptionStorage.Initialize();
+			_queueSubscriptionStorage?.Initialize();
 		}
 
 		#region logging
@@ -170,14 +175,6 @@ namespace Rebus.Kafka
 		{
 			if (string.IsNullOrWhiteSpace(brokerList))
 				throw new NullReferenceException(nameof(brokerList));
-			var maxNameLength = 249;
-			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
-				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
-
-			Address = inputQueueName;
-			_cancellationToken = cancellationToken;
-			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
-			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 
 			_producerConfig = new ProducerConfig
 			{
@@ -193,8 +190,19 @@ namespace Rebus.Kafka
 			_producerConfig.Set("request.required.acks", "-1");
 			_producerConfig.Set("queue.buffering.max.ms", "5");
 
-			_queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
-				, inputQueueName, groupId, cancellationToken);
+			if (!string.IsNullOrWhiteSpace(inputQueueName))
+			{
+				var maxNameLength = 249;
+				if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
+					throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+				Address = inputQueueName;
+				_queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
+					, inputQueueName, groupId, cancellationToken);
+			}
+
+			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
+			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
+			_cancellationToken = cancellationToken;
 		}
 
 		/// <summary>Creates new instance <see cref="KafkaTransport"/>. Allows you to configure
@@ -220,16 +228,20 @@ namespace Rebus.Kafka
 		{
 			if (string.IsNullOrWhiteSpace(brokerList))
 				throw new NullReferenceException(nameof(brokerList));
-			var maxNameLength = 249;
-			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
-				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+
 			_producerConfig = producerConfig ?? throw new NullReferenceException(nameof(producerConfig));
 			_producerConfig.BootstrapServers = brokerList;
 
-			_queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
-				, inputQueueName, consumerConfig, cancellationToken);
+			if (consumerConfig != null)
+			{
+				var maxNameLength = 249;
+				if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
+					throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+				Address = inputQueueName;
+				_queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
+					, inputQueueName, consumerConfig, cancellationToken);
+			}
 
-			Address = inputQueueName;
 			_log = rebusLoggerFactory.GetLogger<KafkaTransport>();
 			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
 			_cancellationToken = cancellationToken;
