@@ -13,6 +13,8 @@ builder.RegisterRebus((configurer, context) => configurer
 );
 ```
 
+The parameters for the producer and the consumer can be specified in detail. [See this example](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Examples/Scaleout.Producer/Program.cs).
+
 It is possible to configures Rebus to use Apache Kafka to transport messages as a one-way client (i.e. will not be able to receive any messages). [See this example](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Examples/KafkaAsOneWayTransport/Program.cs).
 
 ```csharp
@@ -20,8 +22,6 @@ builder.RegisterRebus((configurer, context) => configurer
 	.Transport(t => t.UseKafkaAsOneWayClient("localhost:9092"))
 );
 ```
-
-The parameters for the producer and the consumer can be specified in detail. [See this example](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Examples/Scaleout.Producer/Program.cs).
 
 See examples and tests for other usage examples.
 
