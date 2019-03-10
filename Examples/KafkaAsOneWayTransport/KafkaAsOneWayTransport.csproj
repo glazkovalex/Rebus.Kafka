@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.2</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Rebus.Autofac" Version="5.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\Scaleout.Messages\Scaleout.Messages.csproj" />
+    <ProjectReference Include="..\..\Rebus.Kafka\Rebus.Kafka.csproj" />
+  </ItemGroup>
+
+</Project>
