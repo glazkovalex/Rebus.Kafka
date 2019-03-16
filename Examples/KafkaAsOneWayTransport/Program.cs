@@ -29,12 +29,12 @@ namespace KafkaAsOneWayTransport
 				});
 
 				Configure.With(adapter)
-					.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
+					.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
 					.Transport(t => t.UseKafka(kafkaEndpoint, nameof(KafkaAsOneWayTransport), "temp"))
 					.Start();
 
 				Configure.With(oneWayAdapter)
-					.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
+					.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
 					.Transport(t => t.UseKafkaAsOneWayClient(kafkaEndpoint))
 					.Routing(r => r.TypeBased().Map<TestMessage>(nameof(KafkaAsOneWayTransport)))
 					.Start();
@@ -56,6 +56,8 @@ namespace KafkaAsOneWayTransport
 					key = Console.ReadKey().KeyChar;
 				} while (key == 'r' || key == 'к');
 			}
+
+			Console.ReadKey();
 		}
 
 		const int MessageCount = 10;

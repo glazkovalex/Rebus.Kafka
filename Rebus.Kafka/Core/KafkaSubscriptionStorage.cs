@@ -226,7 +226,7 @@ namespace Rebus.Kafka.Core
 
 		const int CommitPeriod = 5; // ToDo: Добавить в параметры
 		private Consumer<Ignore, TransportMessage> _consumer;
-		private ConsumerConfig _config;
+		private readonly ConsumerConfig _config;
 		readonly ILog _log;
 		readonly IAsyncTaskFactory _asyncTaskFactory;
 
@@ -311,6 +311,7 @@ namespace Rebus.Kafka.Core
 			}
 			catch (Exception) { /* ignored */ }
 			_consumer?.Close();
+			_log.Info($"Closed consumer BootstrapServers:{_config.BootstrapServers}, gropId: {_config.GroupId}.");
 			_consumer?.Dispose();
 		}
 

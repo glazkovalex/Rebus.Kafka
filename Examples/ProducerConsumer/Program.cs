@@ -26,8 +26,8 @@ namespace ProducerConsumer
 			ILogger<KafkaProducer> loggerProducer = loggerFactory.CreateLogger<KafkaProducer>();
 			var loggerConsumer = loggerFactory.CreateLogger<KafkaConsumer>();
 
-			using (var producer_ = new KafkaProducer(_kafkaEndpoint, loggerProducer))
-			using (var producer = new KafkaProducer(producer_)) // for test dependentKafkaProducer 
+			using (var dependentKafkaProducer = new KafkaProducer(_kafkaEndpoint, loggerProducer))
+			using (var producer = new KafkaProducer(dependentKafkaProducer)) // for test dependentKafkaProducer 
 			using (KafkaConsumer consumer = new KafkaConsumer(_kafkaEndpoint, loggerConsumer)
 				, consumer2 = new KafkaConsumer(_kafkaEndpoint, loggerConsumer))
 			{
