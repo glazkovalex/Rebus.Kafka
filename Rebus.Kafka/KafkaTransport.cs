@@ -27,8 +27,6 @@ namespace Rebus.Kafka
 			_queueSubscriptionStorage.CreateQueue(address);
 		}
 
-		static readonly object WaitingSynchronization = new object();
-
 		/// <inheritdoc />
 		public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
 		{
@@ -38,7 +36,7 @@ namespace Rebus.Kafka
 
 			if (_queueSubscriptionStorage?.IsInitialized == false) // waiting for initialization to complete
 			{
-				lock (WaitingSynchronization)
+				lock (_queueSubscriptionStorage)
 					if (_queueSubscriptionStorage?.IsInitialized == false)
 					{
 						_log.Info("Start waiting for initialization to complete...");
