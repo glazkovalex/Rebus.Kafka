@@ -191,9 +191,9 @@ namespace Rebus.Kafka.Core
 			_log.Debug($"Assigned partitions: [{string.Join(", ", partitions.Select(p => p.Partition))}]");
 			if (_waitAssigned.Count > 0)
 			{
-				var topics = partitions.Select(p => p.Topic);
-				var key = _waitAssigned.Keys.FirstOrDefault(k => !k.Except(topics).Any());
-				if (key != null)
+				var topics = partitions.Select(p => p.Topic).Distinct();
+				var keys = _waitAssigned.Keys.Where(k => !k.Except(topics).Any());
+				foreach (var key in keys)
 				{
 					_waitAssigned.TryRemove(key, out var task);
 					task.Value.SetResult(true);
@@ -209,10 +209,9 @@ namespace Rebus.Kafka.Core
 			_log.Debug($"Revoked partitions: [{string.Join(", ", partitionOffsets.Select(po => po.Partition))}]");
 			if (_waitRevoked.Count > 0)
 			{
-				var topics = partitionOffsets.Select(p => p.Topic);
-				var key = _waitRevoked.Keys.FirstOrDefault(k => !k.Except(topics).Any());
-
-				if (key != null)
+				var topics = partitionOffsets.Select(p => p.Topic).Distinct();
+				var keys = _waitRevoked.Keys.Where(k => !k.Except(topics).Any());
+				foreach (var key in keys)
 				{
 					_waitRevoked.TryRemove(key, out var task);
 					task.Value.SetResult(true);
@@ -272,7 +271,8 @@ namespace Rebus.Kafka.Core
 				SessionTimeoutMs = 6000,
 				//StatisticsIntervalMs = 5000,
 #if DEBUG
-                Debug = "msg",
+				TopicMetadataRefreshIntervalMs = 20000, // Otherwise it runs maybe five minutes
+				Debug = "msg",
 #endif
 				AutoOffsetReset = AutoOffsetReset.Latest,
 				EnablePartitionEof = true

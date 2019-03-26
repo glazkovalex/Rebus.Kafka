@@ -42,6 +42,7 @@ namespace Scaleout.Producer
 				SessionTimeoutMs = 6000,
 				//StatisticsIntervalMs = 5000,
 #if DEBUG
+				TopicMetadataRefreshIntervalMs = 20000, // Otherwise it runs maybe five minutes
 				Debug = "msg",
 #endif
 				AutoOffsetReset = AutoOffsetReset.Latest,
