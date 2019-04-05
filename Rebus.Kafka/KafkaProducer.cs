@@ -1,5 +1,4 @@
 ﻿using Confluent.Kafka;
-using Confluent.Kafka.Serdes;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Reflection;

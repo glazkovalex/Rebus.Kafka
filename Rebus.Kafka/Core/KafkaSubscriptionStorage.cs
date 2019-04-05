@@ -1,5 +1,4 @@
 ﻿using Confluent.Kafka;
-using Confluent.Kafka.Serdes;
 using Rebus.Bus;
 using Rebus.Kafka.Serialization;
 using Rebus.Logging;
@@ -255,7 +254,7 @@ namespace Rebus.Kafka.Core
 				throw new NullReferenceException(nameof(brokerList));
 			var maxNameLength = 249;
 			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
-				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+				throw new ArgumentException("Invalid characters or length of a topic (file)", nameof(inputQueueName));
 			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
 				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
 
@@ -293,7 +292,7 @@ namespace Rebus.Kafka.Core
 				throw new NullReferenceException(nameof(brokerList));
 			var maxNameLength = 249;
 			if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
-				throw new ArgumentException("Недопустимые символы или длинна топика (файла)", nameof(inputQueueName));
+				throw new ArgumentException("Invalid characters or length of a topic (file)", nameof(inputQueueName));
 			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
 				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
 
