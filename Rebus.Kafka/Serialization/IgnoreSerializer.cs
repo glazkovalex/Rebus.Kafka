@@ -1,13 +1,15 @@
 ﻿
+using System.Threading.Tasks;
 using Confluent.Kafka;
 
 namespace Rebus.Kafka.Serialization
 {
-    class IgnoreSerializer : ISerializer<Ignore>
-    {
-        public byte[] Serialize(Confluent.Kafka.Ignore data, SerializationContext context)
-        {
-            return null;
-        }
-    }
+	class IgnoreSerializer : IAsyncSerializer<Ignore>
+	{
+		/// <inheritdoc />
+		public Task<byte[]> SerializeAsync(Ignore data, SerializationContext context)
+		{
+			return Task.FromResult((byte[])null);
+		}
+	}
 }

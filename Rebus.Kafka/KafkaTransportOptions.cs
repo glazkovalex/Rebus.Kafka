@@ -9,6 +9,7 @@ using System.Threading;
 
 namespace Rebus.Kafka
 {
+	/// <summary>The Options of the Kafka transport</summary>
 	public static class KafkaTransportOptions
 	{
 		// Based on: https://github.com/rebus-org/Rebus.AzureServiceBus/blob/master/Rebus.AzureServiceBus/Config/AzureServiceBusConfigurationExtensions.cs

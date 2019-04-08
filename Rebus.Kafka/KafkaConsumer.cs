@@ -126,9 +126,12 @@ namespace Rebus.Kafka
             });
             return observable;
         }
-
-        public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken) => _consumer.Commit();
-        public IConsumer<Null, string> Consumer => _consumer;
+		/// <summary>Commits an offset based on the topic/partition/offset of a ConsumeResult.</summary>
+		/// <param name="cancellationToken"></param>
+		/// <returns>The ConsumeResult instance used to determine the committed offset.</returns>
+		public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken) => _consumer.Commit();
+		/// <summary>Internal Consumer</summary>
+		public IConsumer<Null, string> Consumer => _consumer;
 
         #region Скучное
 
@@ -261,7 +264,8 @@ namespace Rebus.Kafka
             // consumer.Unassign()
         }
 
-        public void Dispose()
+        /// <inheritdoc />
+		public void Dispose()
         {
             if (_consumer != null)
             {

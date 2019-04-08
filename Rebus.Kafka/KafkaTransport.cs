@@ -265,6 +265,7 @@ namespace Rebus.Kafka
 			_cancellationToken = cancellationToken;
 		}
 
+		/// <inheritdoc />
 		public void Dispose()
 		{
 			// Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent

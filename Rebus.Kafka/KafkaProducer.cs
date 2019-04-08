@@ -113,7 +113,8 @@ namespace Rebus.Kafka
             }
         }
 
-        public void Dispose()
+        /// <inheritdoc />
+		public void Dispose()
         {
             // Because the tasks returned from ProduceAsync might not be finished, wait for all messages to be sent
             _producer.Flush(TimeSpan.FromSeconds(5));
