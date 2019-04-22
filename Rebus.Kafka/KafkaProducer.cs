@@ -76,7 +76,7 @@ namespace Rebus.Kafka
             if (dependentKafkaProducer == null)
                 throw new ArgumentNullException(nameof(dependentKafkaProducer));
             var dependentProducer = typeof(KafkaProducer).GetField(nameof(_producer), BindingFlags.Instance | BindingFlags.NonPublic)
-                ?.GetValue(dependentKafkaProducer) as Producer<Null, string>;
+                ?.GetValue(dependentKafkaProducer) as IProducer<Null, string>;
             _producer = new DependentProducerBuilder<Null, string>(dependentProducer.Handle).Build();
             _logger = typeof(KafkaProducer).GetField(nameof(_logger), BindingFlags.Instance | BindingFlags.NonPublic)
                 ?.GetValue(dependentKafkaProducer) as ILogger<KafkaProducer>;
@@ -121,14 +121,14 @@ namespace Rebus.Kafka
             _producer?.Dispose();
         }
 
-        private void OnLog(Producer<Null, string> sender, LogMessage logMessage)
+        private void OnLog(IProducer<Null, string> sender, LogMessage logMessage)
             => _logger?.LogDebug(
                 "Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
                 logMessage.Name,
                 logMessage.Level,
                 logMessage.Message);
 
-        private void OnError(Producer<Null, string> sender, Error error)
+        private void OnError(IProducer<Null, string> sender, Error error)
             => _logger?.LogWarning("Producer error: {error}. No action required.", error);
     }
 }

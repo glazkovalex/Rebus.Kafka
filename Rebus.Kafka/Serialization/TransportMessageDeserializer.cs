@@ -3,16 +3,15 @@ using Newtonsoft.Json;
 using Rebus.Messages;
 using System;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Rebus.Kafka.Serialization
 {
-	class TransportMessageDeserializer : IAsyncDeserializer<TransportMessage>
+	class TransportMessageDeserializer : IDeserializer<TransportMessage>
 	{
 		/// <inheritdoc />
-		public Task<TransportMessage> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
+		public TransportMessage Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
 		{
-			return Task.FromResult(JsonConvert.DeserializeObject<TransportMessage>(Encoding.UTF8.GetString(data.ToArray())));
+			return JsonConvert.DeserializeObject<TransportMessage>(Encoding.UTF8.GetString(data.ToArray()));
 		}
 	}
 }

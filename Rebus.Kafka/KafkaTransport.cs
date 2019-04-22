@@ -147,17 +147,17 @@ namespace Rebus.Kafka
 
 		#region logging
 
-		private void ProducerOnLog(Producer<Ignore, TransportMessage> sender, LogMessage logMessage)
+		private void ProducerOnLog(IProducer<Ignore, TransportMessage> sender, LogMessage logMessage)
 			=> _log.Debug(
 				"Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
 				logMessage.Name,
 				logMessage.Level,
 				logMessage.Message);
 
-		private void ProducerOnStatistics(Producer<Ignore, TransportMessage> sender, string json)
+		private void ProducerOnStatistics(IProducer<Ignore, TransportMessage> sender, string json)
 			=> _log.Info($"Producer statistics: {json}");
 
-		private void ProducerOnError(Producer<Ignore, TransportMessage> sender, Error error)
+		private void ProducerOnError(IProducer<Ignore, TransportMessage> sender, Error error)
 			=> _log.Warn("Producer error: {error}. No action required.", error);
 
 		#endregion

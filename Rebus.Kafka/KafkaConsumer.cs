@@ -180,8 +180,8 @@ namespace Rebus.Kafka
                 .SetLogHandler(OnLog)
                 .SetErrorHandler(OnError)
                 .SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
-                .SetPartitionsAssignedHandler((Action<IConsumer<Null, string>, List<TopicPartition>>)ConsumerOnPartitionsAssigned)
-                .SetPartitionsRevokedHandler((Action<IConsumer<Null, string>, List<TopicPartitionOffset>>)ConsumerOnPartitionsRevoked)
+                .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssigned)
+                .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
                 .Build();
         }
 
@@ -219,8 +219,8 @@ namespace Rebus.Kafka
                 .SetLogHandler(OnLog)
                 .SetErrorHandler(OnError)
                 .SetStatisticsHandler((_, json) => _logger.LogInformation($"Statistics: {json}"))
-                .SetPartitionsAssignedHandler((Action<IConsumer<Null, string>, List<TopicPartition>>)ConsumerOnPartitionsAssigned)
-                .SetPartitionsRevokedHandler((Action<IConsumer<Null, string>, List<TopicPartitionOffset>>)ConsumerOnPartitionsRevoked)
+                .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssigned)
+                .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
                 .Build();
         }
 
@@ -234,7 +234,7 @@ namespace Rebus.Kafka
                     logMessage.Message);
         }
 
-        private void OnError(Consumer<Null, string> sender, Error error)
+        private void OnError(IConsumer<Null, string> sender, Error error)
         {
             if (!error.IsFatal)
                 _logger?.LogWarning("Consumer error: {error}. No action required.", error);
