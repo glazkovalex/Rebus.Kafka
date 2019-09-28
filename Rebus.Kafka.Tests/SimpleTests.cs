@@ -8,13 +8,15 @@ using Rebus.Routing.TypeBased;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using Rebus.Kafka.Tests.Messages;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Rebus.Kafka.Tests
 {
-	public class SimpleTests
-	{
+    //[Collection("ServicesFixture")]
+    public class SimpleTests : BaseTestWithServicesFixture
+    {
 		[Fact]
 		public async Task SendReceive()
 		{
@@ -26,15 +28,15 @@ namespace Rebus.Kafka.Tests
 				adapter.Handle<Message>(message =>
 				{
 					amount = amount + message.MessageNumber;
-					_output.WriteLine($"Received : \"{message.MessageNumber}\"");
+					Output.WriteLine($"Received : \"{message.MessageNumber}\"");
 					if (message.MessageNumber == MessageCount)
-						_output.WriteLine($"Получено {MessageCount} сообщений за {sw.ElapsedMilliseconds / 1000f:N3}с");
+						Output.WriteLine($"Получено {MessageCount} сообщений за {sw.ElapsedMilliseconds / 1000f:N3}с");
 					return Task.CompletedTask;
 				});
 
 				Configure.With(adapter)
-					.Logging(l => l.Use(new TestOutputLoggerFactory(_output)))
-					.Transport(t => t.UseKafka(kafkaEndpoint, nameof(SimpleTests), "temp"))
+					.Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+					.Transport(t => t.UseKafka(Fixture.KafkaEndpoint, nameof(SimpleTests), "temp"))
 					.Routing(r => r.TypeBased().Map<Message>(nameof(SimpleTests)))
 					.Start();
 
@@ -58,11 +60,11 @@ namespace Rebus.Kafka.Tests
 		{
 			IContainer container;
 			var builder = new ContainerBuilder();
-			builder.RegisterInstance(_output).As<ITestOutputHelper>().SingleInstance();
+			builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
 			builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
 			builder.RegisterRebus((configurer, context) => configurer
-				.Logging(l => l.Use(new TestOutputLoggerFactory(_output)))
-				.Transport(t => t.UseKafka(kafkaEndpoint, nameof(SimpleTests)))
+				.Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+				.Transport(t => t.UseKafka(Fixture.KafkaEndpoint, nameof(SimpleTests)))
 				.Options(o => o.SetMaxParallelism(5))
 			);
 
@@ -89,41 +91,10 @@ namespace Rebus.Kafka.Tests
 
 		internal static int Amount;
 		const int MessageCount = 10;
-		private readonly ITestOutputHelper _output;
-		static readonly string kafkaEndpoint = "192.168.0.166:9092";
 
-		/// <summary>Creates new instance <see cref="SimpleTests"/>.</summary>
-		public SimpleTests(ITestOutputHelper output)
-		{
-			this._output = output;
-		}
+        /// <summary>Creates new instance <see cref="SimpleTests"/>.</summary>
+        public SimpleTests(ServicesFixture fixture, ITestOutputHelper output) : base(fixture, output) { }
 
 		#endregion
-	}
-
-	/// <summary>Message class used for testing</summary>
-	public class Message
-	{
-		public int MessageNumber { get; set; }
-	}
-
-	/// <inheritdoc />
-	public class MessageHandler : IHandleMessages<Message>
-	{
-		/// <inheritdoc />
-		public Task Handle(Message evnt)
-		{
-			SimpleTests.Amount += evnt.MessageNumber;
-			_output.WriteLine($"Received : \"{evnt.MessageNumber}\"");
-			return Task.CompletedTask;
-		}
-
-		private readonly ITestOutputHelper _output;
-
-		/// <summary>Creates new instance <see cref="MessageHandler"/>.</summary>
-		public MessageHandler(ITestOutputHelper output)
-		{
-			_output = output;
-		}
 	}
 }

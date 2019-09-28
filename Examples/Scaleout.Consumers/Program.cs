@@ -32,6 +32,6 @@ namespace Scaleout.Consumers
 				bus.Unsubscribe<TestMessage>().Wait(); // only for test
 			}
 		}
-		static readonly string _kafkaEndpoint = "192.168.0.166:9092";
+		static readonly string _kafkaEndpoint = "127.0.0.1:9092";
 	}
 }
