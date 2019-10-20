@@ -28,14 +28,12 @@ namespace Rebus.Kafka.Tests.Core
 
                 if (existingContainer != null)
                 {
-                    _output.Add($"Found container on the local machine with name \"{name}\". Status: {existingContainer?.Status}");
-                    _output.Add($"Find container with name {name} and Id: {existingContainer.ID}");
-
+                    _output.Add($"Found container on the local machine with name \"{name}\", state: {existingContainer.State}, Id: {existingContainer.ID}");
+                    if(existingContainer.State == "running")
                     {
                         // the docker images are started, need to restart them
                         bool completed = client.Containers.StopContainerAsync(existingContainer.ID, new ContainerStopParameters()).Result;
                         _output.Add($"Stopped container with Id: {existingContainer.ID}.");
-
                     }
                     client.Containers.RemoveContainerAsync(existingContainer.ID, new ContainerRemoveParameters()).Wait();
                     _output.Add($"Removed Container with Id: {existingContainer.ID}.");
@@ -44,7 +42,6 @@ namespace Rebus.Kafka.Tests.Core
                 {
                     _output.Add($"Containers with Name \"{name}\" not found.");
                 }
-
 
                 // pull image again
                 client.Images.CreateImageAsync(
