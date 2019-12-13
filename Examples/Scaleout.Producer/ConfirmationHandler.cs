@@ -17,7 +17,6 @@ namespace Scaleout.Producer
 			_counter.Add(evnt.MessageNumber);
 		}
 
-		public int Amount;
 		private readonly Counter _counter;
 		public ConfirmationHandler(Counter counter)
 		{
