@@ -84,7 +84,7 @@ namespace Rebus.Kafka
                         {
                             while (!cancellationToken.IsCancellationRequested)
                             {
-
+ 
                                 var consumeResult = _consumer.Consume(cancellationToken);
                                 if (consumeResult.IsPartitionEOF)
                                 {
