@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Rebus.Autofac" Version="5.2.0" />
+    <PackageReference Include="Rebus.Autofac" Version="7.0.0" />
   </ItemGroup>
 
   <ItemGroup>
