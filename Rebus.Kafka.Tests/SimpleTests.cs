@@ -12,6 +12,10 @@ using Rebus.Kafka.Tests.Messages;
 using Rebus.Logging;
 using Xunit;
 using Xunit.Abstractions;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Threading;
+using Confluent.Kafka;
 
 namespace Rebus.Kafka.Tests
 {
@@ -89,44 +93,89 @@ namespace Rebus.Kafka.Tests
         }
 
         [Fact]
-        public async Task Performance()
+        public async Task RebusPerformance()
         {
             int perfomanceCount = 10000;
+            
             using (var adapter = new BuiltinHandlerActivator())
             {
                 Stopwatch swHandle = null;
 
                 adapter.Handle<Message>(message =>
-                {
-                    if (swHandle == null)
-                    {
-                        swHandle = Stopwatch.StartNew();
-                    }
-                    if (message.MessageNumber == perfomanceCount)
-                    {
-                        swHandle.Stop();
-                        Output.WriteLine($"Received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
-                    }
-                    return Task.CompletedTask;
-                });
+                            {
+                                if (swHandle == null)
+                                {
+                                    swHandle = Stopwatch.StartNew();
+                                }
+                                if (message.MessageNumber == perfomanceCount)
+                                {
+                                    swHandle.Stop();
+                                    Output.WriteLine($"Rebus received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
+                                }
+                                return Task.CompletedTask;
+                            });
 
                 Configure.With(adapter)
-                    .Logging(l => l.Use(new TestOutputLoggerFactory(Output) { MinLevel = LogLevel.Warn }))
+                    .Logging(l => l.Use(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Warn }))
                     .Transport(t => t.UseKafka(Fixture.KafkaEndpoint, nameof(SimpleTests), "temp"))
                     .Routing(r => r.TypeBased().Map<Message>(nameof(SimpleTests)))
                     .Start();
 
-                var messages = Enumerable.Range(1, perfomanceCount)
-                    .Select(i => adapter.Bus.Send(new Message { MessageNumber = i })).ToArray();
                 Stopwatch swSend = Stopwatch.StartNew();
-
-                Task.WaitAll(messages);
+                var messages = Enumerable.Range(1, perfomanceCount)
+                    .Select(i => adapter.Bus.Send(new Message { MessageNumber = i }));
+                await Task.WhenAll(messages);
 
                 swSend.Stop();
-                Output.WriteLine($"Send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
+                Output.WriteLine($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
+
+                Assert.True(swSend.ElapsedMilliseconds < 10000);
+                await Task.Delay(10000);
+                Assert.True(swHandle?.ElapsedMilliseconds < 10000);
+            }
+        }
+
+        [Fact(Skip = "Doesn't work at the moment")]
+        public async Task ConfluentPerformance()
+        {
+            int perfomanceCount = 10000;
+            
+            CancellationTokenSource cts = new CancellationTokenSource();
+            using (var producer = new KafkaProducer(Fixture.KafkaEndpoint))
+            using (KafkaConsumer consumer = new KafkaConsumer(Fixture.KafkaEndpoint, (ILogger<KafkaConsumer>) null))
+            {
+                Stopwatch swHandle = null;
+
+                consumer.Consume(new[] {"temp"})
+                    .Subscribe(message =>
+                    {
+                        if (swHandle == null)
+                        {
+                            swHandle = Stopwatch.StartNew();
+                        }
+
+                        if (int.Parse(message.Value) == perfomanceCount)
+                        {
+                            swHandle.Stop();
+                            Output.WriteLine(
+                                $"Confluent received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
+                            cts.Cancel();
+                        }
+                    } , cts.Token);
+
+                Stopwatch sw = Stopwatch.StartNew();
+                var jobs = Enumerable.Range(1, perfomanceCount)
+                    .Select(i => new Message<Null, string> {Value = i.ToString()})
+                    .Select(m => producer.ProduceAsync("temp", m)).ToArray();
+                await Task.WhenAll(jobs);
+                Output.WriteLine($"Confluent send {perfomanceCount} in {sw.ElapsedMilliseconds / 1000:N3}с");
+
+                Assert.True(sw.ElapsedMilliseconds < 10000);
 
                 await Task.Delay(10000);
-                Assert.True(swSend.ElapsedMilliseconds < 10000);
+                //cts.Cancel();
+                await Task.Delay(100);
+                Assert.True(swHandle?.ElapsedMilliseconds < 10000);
             }
         }
 
