@@ -5,20 +5,20 @@ using Xunit.Abstractions;
 namespace Rebus.Kafka.Tests.Messages
 {
     /// <inheritdoc />
-    public class MessageHandler : IHandleMessages<Message>
+    public class MessageHandler2 : IHandleMessages<Message>
     {
         /// <inheritdoc />
         public Task Handle(Message evnt)
         {
             SimpleTests.Counter.Add(evnt.MessageNumber);
-            _output.WriteLine($"MessageHandler received : \"{evnt.MessageNumber}\"");
+            _output.WriteLine($"MessageHandler2 received : \"{evnt.MessageNumber}\"");
             return Task.CompletedTask;
         }
 
         private readonly ITestOutputHelper _output;
 
         /// <summary>Creates new instance <see cref="MessageHandler"/>.</summary>
-        public MessageHandler(ITestOutputHelper output)
+        public MessageHandler2(ITestOutputHelper output)
         {
             _output = output;
         }

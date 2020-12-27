@@ -88,7 +88,49 @@ namespace Rebus.Kafka.Tests
                 Task.WaitAll(messages);
                 await Task.Delay(10000);
 
-                Assert.Equal(Amount, sendAmount);
+                Assert.Equal(Counter.Amount, sendAmount);
+            }
+        }
+
+        [Fact]
+        public async Task TwoPublishSameEvent()
+        {
+            var builder1 = new ContainerBuilder();
+            builder1.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder1.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
+            builder1.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(Fixture.KafkaEndpoint, nameof(SimpleTests)))
+                .Options(o => o.SetMaxParallelism(5))
+            );
+            var builder2 = new ContainerBuilder();
+            builder2.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder2.RegisterType<MessageHandler2>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
+            builder2.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(Fixture.KafkaEndpoint, $"{nameof(SimpleTests)}2"))
+                .Options(o => o.SetMaxParallelism(5))
+            );
+
+            using (IContainer container1 = builder1.Build())
+            using (IContainer container2 = builder2.Build())
+            using (IBus bus1 = container1.Resolve<IBus>())
+            using (IBus bus2 = container2.Resolve<IBus>())
+            {
+                await bus1.Subscribe<Message>();
+                await bus2.Subscribe<Message>();
+
+                var sendAmount = 0;
+                int i = 1;
+                await bus1.Publish(new Message { MessageNumber = i });
+                sendAmount += i * 2; // two handlers
+                i++;
+                await bus2.Publish(new Message { MessageNumber = i });
+                sendAmount += i * 2;
+
+                await Task.Delay(10000);
+
+                Assert.Equal(Counter.Amount, sendAmount);
             }
         }
 
@@ -102,18 +144,15 @@ namespace Rebus.Kafka.Tests
                 Stopwatch swHandle = null;
 
                 adapter.Handle<Message>(message =>
-                            {
-                                if (swHandle == null)
-                                {
-                                    swHandle = Stopwatch.StartNew();
-                                }
-                                if (message.MessageNumber == perfomanceCount)
-                                {
-                                    swHandle.Stop();
-                                    Output.WriteLine($"Rebus received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
-                                }
-                                return Task.CompletedTask;
-                            });
+                {
+                    swHandle ??= Stopwatch.StartNew();
+                    if (message.MessageNumber == perfomanceCount)
+                    {
+                        swHandle.Stop();
+                        Output.WriteLine($"Rebus received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
+                    }
+                    return Task.CompletedTask;
+                });
 
                 Configure.With(adapter)
                     .Logging(l => l.Use(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Warn }))
@@ -181,11 +220,14 @@ namespace Rebus.Kafka.Tests
 
         #region Settings
 
-        internal static int Amount;
+        internal static Counter Counter;
         const int MessageCount = 10;
 
         /// <summary>Creates new instance <see cref="SimpleTests"/>.</summary>
-        public SimpleTests(ServicesFixture fixture, ITestOutputHelper output) : base(fixture, output) { }
+        public SimpleTests(ServicesFixture fixture, ITestOutputHelper output) : base(fixture, output)
+        {
+            Counter = new Counter();
+        }
 
         #endregion
     }
