@@ -61,6 +61,33 @@ namespace Rebus.Kafka.Tests
         }
 
         [Fact]
+        public async Task SendReceiveWithConfigs()
+        {
+            IContainer container;
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
+            var producerConfig = new ProducerConfig();
+            var consumerConfig = new ConsumerConfig();
+            builder.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(Fixture.KafkaEndpoint, nameof(SimpleTests), producerConfig, consumerConfig))
+                .Routing(r => r.TypeBased().MapAssemblyOf<Message>(nameof(SimpleTests)))
+                .Options(o => o.SetMaxParallelism(5))
+            );
+
+            using (container = builder.Build())
+            using (IBus bus = container.Resolve<IBus>())
+            {
+                var answerToTheUltimateQuestionOfLifeTheUniverseAndEverything = 42;
+                await bus.Send(new Message { MessageNumber = answerToTheUltimateQuestionOfLifeTheUniverseAndEverything });
+                await Task.Delay(10000);
+
+                Assert.Equal(Counter.Amount, answerToTheUltimateQuestionOfLifeTheUniverseAndEverything);
+            }
+        }
+
+        [Fact]
         public async Task PublishSubscribe()
         {
             IContainer container;
@@ -138,7 +165,7 @@ namespace Rebus.Kafka.Tests
         public async Task RebusPerformance()
         {
             int perfomanceCount = 10000;
-            
+
             using (var adapter = new BuiltinHandlerActivator())
             {
                 Stopwatch swHandle = null;
@@ -178,14 +205,14 @@ namespace Rebus.Kafka.Tests
         public async Task ConfluentPerformance()
         {
             int perfomanceCount = 10000;
-            
+
             CancellationTokenSource cts = new CancellationTokenSource();
             using (var producer = new KafkaProducer(Fixture.KafkaEndpoint))
-            using (KafkaConsumer consumer = new KafkaConsumer(Fixture.KafkaEndpoint, (ILogger<KafkaConsumer>) null))
+            using (KafkaConsumer consumer = new KafkaConsumer(Fixture.KafkaEndpoint, (ILogger<KafkaConsumer>)null))
             {
                 Stopwatch swHandle = null;
 
-                consumer.Consume(new[] {"temp"})
+                consumer.Consume(new[] { "temp" })
                     .Subscribe(message =>
                     {
                         if (swHandle == null)
@@ -200,11 +227,11 @@ namespace Rebus.Kafka.Tests
                                 $"Confluent received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
                             cts.Cancel();
                         }
-                    } , cts.Token);
+                    }, cts.Token);
 
                 Stopwatch sw = Stopwatch.StartNew();
                 var jobs = Enumerable.Range(1, perfomanceCount)
-                    .Select(i => new Message<Null, string> {Value = i.ToString()})
+                    .Select(i => new Message<Null, string> { Value = i.ToString() })
                     .Select(m => producer.ProduceAsync("temp", m)).ToArray();
                 await Task.WhenAll(jobs);
                 Output.WriteLine($"Confluent send {perfomanceCount} in {sw.ElapsedMilliseconds / 1000:N3}с");
