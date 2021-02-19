@@ -27,7 +27,10 @@ namespace Rebus.Kafka
 			_queueSubscriptionStorage.CreateQueue(address);
 		}
 
-		/// <inheritdoc />
+		/// <summary>
+		/// Sends the given <see cref="TransportMessage"/> to the queue with the specified globally addressable name
+		/// </summary>
+		/// <exception cref="InvalidOperationException">If after waiting the procedure of transport initialization is still incomplete.</exception>
 		public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
 		{
 			if (destinationAddress == null) throw new ArgumentNullException(nameof(destinationAddress));
@@ -38,16 +41,18 @@ namespace Rebus.Kafka
 			{
 				lock (_queueSubscriptionStorage)
 					if (_queueSubscriptionStorage?.IsInitialized == false)
-					{
-						_log.Info("Start waiting for initialization to complete...");
-						int count = 300; //30s
+                    {
+                        int count = 3000; //5 minutes
+						_log.Info($"Start waiting for the initialization to complete for {count/600:N0} minutes...");
 						while (_queueSubscriptionStorage?.IsInitialized == false)
 						{
 							Thread.Sleep(100);
 							if (--count <= 0)
 								throw new InvalidOperationException(
-									"The transport initialization procedure is still incomplete."
-									+ " There is no confirmation of completion of the subscription to the input queue.");
+									$"After waiting for {count/600:N0} minutes, the procedure of transport initialization is still incomplete."
+									+ " There is no confirmation of completion of the subscription to the input queue."
+                                    + " Try pausing before sending the first message, or handling this exception in a"
+                                    + " loop to wait for the consumer's subscription to your queue to complete.");
 						}
 						_log.Info("The transport initialization is complete.");
 					}
