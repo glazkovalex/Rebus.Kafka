@@ -13,6 +13,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Rebus.Kafka.Configs;
 
 namespace Rebus.Kafka.Core
 {
@@ -38,7 +39,7 @@ namespace Rebus.Kafka.Core
 						continue;
 					}
 
-					if (consumeResult.Offset % CommitPeriod == 0)
+					if (consumeResult.Offset % _behaviorConfig.CommitPeriod == 0)
 					{
 						// The Commit method sends a "commit offsets" request to the Kafka
 						// cluster and synchronously waits for the response. This is very
@@ -229,7 +230,7 @@ namespace Rebus.Kafka.Core
 			return _topicRegex.Replace(topic, "_");
 		}
 
-		const int CommitPeriod = 5; // ToDo: Добавить в параметры
+        private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
 		private IConsumer<Ignore, TransportMessage> _consumer;
 		private readonly ConsumerConfig _config;
 		readonly ILog _log;
@@ -296,17 +297,30 @@ namespace Rebus.Kafka.Core
 			if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
 				throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
 
+            _log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
 			_config = config ?? throw new NullReferenceException(nameof(config));
+            if (_config.EnableAutoCommit == true)
+            {
+                _log.Warn($"{nameof(ConsumerConfig)}.{nameof(ConsumerConfig.EnableAutoCommit)} == true! " +
+					"This means that every message received by the transport will already be considered DELIVERED, " +
+					"before the message got to the bus client, or an exception occurred when trying to process it! " +
+                    $"Therefore, it is recommended that the {nameof(ConsumerConfig)}.{nameof(ConsumerConfig.EnableAutoCommit)} parameter is always set to false");
+            }
 			_config.BootstrapServers = brokerList;
 			if (string.IsNullOrEmpty(_config.GroupId))
 				_config.GroupId = Guid.NewGuid().ToString("N");
 
 			_asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
-			_log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
 			_cancellationToken = cancellationToken;
-
 			_subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
 		}
+
+        internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
+            , string inputQueueName, ConsumerAndBehaviorConfig consumerAndBehaviorConfig, CancellationToken cancellationToken = default(CancellationToken))
+		: this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, (ConsumerConfig)consumerAndBehaviorConfig, cancellationToken)
+        {
+            _behaviorConfig = consumerAndBehaviorConfig.BehaviorConfig;
+        }
 
 		/// <inheritdoc />
 		public void Dispose()

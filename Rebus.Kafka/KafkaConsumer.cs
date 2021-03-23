@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Rebus.Kafka.Configs;
 
 namespace Rebus.Kafka
 {
@@ -39,7 +40,7 @@ namespace Rebus.Kafka
                         action(consumeResult.Message);
                         //_logger?.LogInformation($"Received message at {consumeResult.TopicPartitionOffset}: {consumeResult.Value}");
 
-                        if (consumeResult.Offset % _commitPeriod == 0)
+                        if (consumeResult.Offset % _behaviorConfig.CommitPeriod == 0)
                         {
                             // The Commit method sends a "commit offsets" request to the Kafka
                             // cluster and synchronously waits for the response. This is very
@@ -95,7 +96,7 @@ namespace Rebus.Kafka
                                 observer.OnNext(consumeResult.Message);
                                 //_logger?.LogInformation($"Received message at {consumeResult.TopicPartitionOffset}: {consumeResult.Value}");
 
-                                if (consumeResult.Offset % _commitPeriod == 0)
+                                if (consumeResult.Offset % _behaviorConfig.CommitPeriod == 0)
                                 {
                                     // The Commit method sends a "commit offsets" request to the Kafka
                                     // cluster and synchronously waits for the response. This is very
@@ -136,7 +137,7 @@ namespace Rebus.Kafka
         #region Скучное
 
         private readonly IConsumer<Null, string> _consumer;
-        private readonly int _commitPeriod = 5;
+        private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
         private readonly ILogger<KafkaConsumer> _logger;
         private IEnumerable<string> _topics;
 
@@ -161,7 +162,6 @@ namespace Rebus.Kafka
                 SessionTimeoutMs = 6000,
                 //StatisticsIntervalMs = 5000,
 #if DEBUG
-
 				Debug = "msg",
 #endif
                 AutoOffsetReset = AutoOffsetReset.Latest,
@@ -191,14 +191,15 @@ namespace Rebus.Kafka
         /// <param name="groupId">Id of group</param>
         public KafkaConsumer(string brokerList, ILogger<KafkaConsumer> logger = null, string groupId = null) : this(brokerList, groupId, logger) { }
 
-        /// <summary>Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
-        /// all the parameters of the consumer used in this transport.</summary>
-        /// <param name="consumerConfig">A collection of librdkafka configuration parameters
-        ///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
-        ///     and parameters specific to this client (refer to:
-        ///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
-        ///     At a minimum, 'bootstrap.servers' and 'group.id' must be
-        ///     specified.</param>
+        /// <summary>
+        /// Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
+        /// all the parameters of the consumer used in this transport.
+        /// </summary>
+        /// <param name="consumerConfig">
+        /// A collection of librdkafka configuration parameters (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+        /// and parameters specific to this client (refer to: <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+        /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
+        /// </param>
         /// <param name="logger"></param>
         public KafkaConsumer(ConsumerConfig consumerConfig, ILogger<KafkaConsumer> logger = null)
         {
@@ -222,6 +223,23 @@ namespace Rebus.Kafka
                 .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssigned)
                 .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
                 .Build();
+        }
+
+        /// <summary>
+        /// Creates new instance <see cref="KafkaConsumer"/>. Allows you to configure
+        /// all the parameters and behavior of the consumer used in this transport.
+        /// </summary>
+        /// <param name="consumerAndBehaviorConfig">
+        /// Contains behavior settings in the Behavior property in addition to a collection of librdkafka configuration parameters
+        /// (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) and parameters specific to this client
+        /// (refer to: <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+        /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
+        /// </param>
+        /// <param name="logger"></param>
+        public KafkaConsumer(ConsumerAndBehaviorConfig consumerAndBehaviorConfig, ILogger<KafkaConsumer> logger = null) 
+            : this((ConsumerConfig)consumerAndBehaviorConfig, logger)
+        {
+            _behaviorConfig = consumerAndBehaviorConfig.BehaviorConfig;
         }
 
         private void OnLog(object sender, LogMessage logMessage)
