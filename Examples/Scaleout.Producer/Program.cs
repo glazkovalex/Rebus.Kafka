@@ -46,7 +46,8 @@ namespace Scaleout.Producer
 				Debug = "msg",
 #endif
 				AutoOffsetReset = AutoOffsetReset.Latest,
-				EnablePartitionEof = true
+				EnablePartitionEof = true,
+				AllowAutoCreateTopics = true
 			};
 			consumerConfig.Set("fetch.message.max.bytes", "10240");
 

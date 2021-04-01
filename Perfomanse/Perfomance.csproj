@@ -11,12 +11,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="5.0.0" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="3.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
-    <PackageReference Include="Rebus.Autofac" Version="7.2.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Rebus.Kafka\Rebus.Kafka.csproj" />
-    <ProjectReference Include="..\Scaleout.Messages\Scaleout.Messages.csproj" />
+    <ProjectReference Include="..\Rebus.Kafka\Rebus.Kafka.csproj" />
   </ItemGroup>
 
 </Project>
