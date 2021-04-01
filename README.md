@@ -42,7 +42,7 @@ if (!Library.IsLoaded)
 2. In the summer of 2020, the [Librdkafka v1.5.0 library was updated, which was a change unexpected](https://github.com/edenhill/librdkafka/releases/tag/v1.5.0) for many users of the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka). 
 	> Consumer will no longer trigger auto creation of topics, allow.auto.create.topics=true may be used to re-enable the old deprecated functionality:
  
-	 At the request of the transport users, I enabled the previous transport behavior by default. **Now the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default as before**. 
+	At the request of the transport users, I enabled the previous transport behavior by default. **Now the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default as before**. 
 	However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
 
 ### ToDo:
