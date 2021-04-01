@@ -275,7 +275,8 @@ namespace Rebus.Kafka.Core
 				Debug = "msg",
 #endif
 				AutoOffsetReset = AutoOffsetReset.Latest,
-				EnablePartitionEof = true
+				EnablePartitionEof = true,
+				AllowAutoCreateTopics = true
 			};
 			_config.Set("fetch.message.max.bytes", "10240");
 

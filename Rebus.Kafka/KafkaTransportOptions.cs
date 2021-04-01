@@ -6,6 +6,7 @@ using Rebus.Threading;
 using Rebus.Transport;
 using System;
 using System.Threading;
+using Rebus.Kafka.Configs;
 
 namespace Rebus.Kafka
 {
@@ -81,6 +82,50 @@ namespace Rebus.Kafka
 					var cancellationToken = c.Get<CancellationToken>();
 					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
 						, inputQueueName, producerConfig, consumerConfig, cancellationToken);
+				});
+
+			// Register implementation of the Transport as ITransport
+			configurer.Register(c => c.Get<KafkaTransport>());
+
+			// Link the ISubscriberStorage to the transport
+			configurer
+				.OtherService<ISubscriptionStorage>()
+				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
+		}
+
+		/// <summary>Detailed Rebus configuration to use Apache Kafka to transport messages.
+		/// Allows you to configure all the parameters of the producer and the consumer used in this transport.</summary>
+		/// <param name="configurer"></param>
+		/// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.
+		/// Overwrites 'bootstrap' values.server', possibly specified via producerConfig and consumerConfig</param>
+		/// <param name="inputQueueName">name of input queue</param>
+		/// <param name="producerConfig">A collection of librdkafka configuration parameters
+		///     (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md)
+		///     and parameters specific to this client (refer to:
+		///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+		///     At a minimum, 'bootstrap.servers' must be specified.</param>
+        /// <param name="consumerAndBehaviorConfig">
+        /// Contains behavior settings in the Behavior property in addition to a collection of librdkafka configuration parameters
+        /// (refer to https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) and parameters specific to this client
+        /// (refer to: <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
+        /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
+        /// </param>
+		public static void UseKafka(this StandardConfigurer<ITransport> configurer,
+			string brokerList, string inputQueueName, ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig)
+		{
+			// Register implementation of the transport as ISubscriptionStorage as well
+			configurer
+				.OtherService<KafkaTransport>()
+				.Register(c =>
+				{
+					if (string.IsNullOrEmpty(inputQueueName))
+						throw new ArgumentNullException(nameof(inputQueueName),
+							$"You must supply a valid value for topicPrefix");
+					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
+					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
+					var cancellationToken = c.Get<CancellationToken>();
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
+						, inputQueueName, producerConfig, consumerAndBehaviorConfig, cancellationToken);
 				});
 
 			// Register implementation of the Transport as ITransport
