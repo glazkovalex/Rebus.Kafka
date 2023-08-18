@@ -323,7 +323,7 @@ namespace Rebus.Kafka.Tests
                         .Select(m => producer.ProduceAsync(topic, m));
                     await Task.WhenAll(jobs);
                     swSend.Stop();
-                    Output.WriteLine($"Confluent send {perfomanceCount} in {swSend.ElapsedMilliseconds / 1000f:N3}с");
+                    Output.WriteLine($"Confluent send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}с");
                     Assert.True(swSend.ElapsedMilliseconds < 2000);
 
                     await Task.Delay(10000);

@@ -50,7 +50,7 @@ if (!Library.IsLoaded)
 2. The format of transport messages has changed. In them now the key is not Null, but string. The messages are incompatible with previous versions of the transport!
 3. Message headers are now supported;
 4. Refactoring for the current version of Apache Kafka "confluentinc/cp-kafka:7.0.1"; 
-5. Transport forcibly creates missing messages if Consumer.Config.AllowAutoCreateTopics == true;
+5. Transport forcibly creates missing topics if Consumer.Config.AllowAutoCreateTopics == true; However, I do not recommend using allow.auto.create.topics=true for production! 
 
 ### ToDo:
 - In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
