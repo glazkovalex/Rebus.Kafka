@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using System;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -26,19 +27,21 @@ namespace Rebus.Kafka
             {
                 BootstrapServers = brokerList,
                 ApiVersionRequest = true,
-                QueueBufferingMaxKbytes = 10240,
+                //QueueBufferingMaxKbytes = 10240,
                 //{ "socket.blocking.max.ms", 1 }, // **DEPRECATED * *No longer used.
 #if DEBUG
 				Debug = "msg",
 #endif
-                MessageTimeoutMs = 3000,
+                //MessageTimeoutMs = 3000,
+                BrokerVersionFallback = "0.10",
+                ApiVersionFallbackMs = 0,
+                //Acks = Acks.All,
             };
-            config.Set("request.required.acks", "-1");
-            config.Set("queue.buffering.max.ms", "5");
+            //config.Set("queue.buffering.max.ms", "5");
 
             _producer = new ProducerBuilder<Null, string>(config)
                 .SetKeySerializer(Serializers.Null)
-                .SetValueSerializer(Serializers.Utf8)
+                .SetValueSerializer(new KafkaProducer.Utf8Serializer())//Serializers.Utf8)
                 .SetLogHandler(OnLog)
                 .SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
                 .SetErrorHandler(OnError)
@@ -61,7 +64,7 @@ namespace Rebus.Kafka
 
             _producer = new ProducerBuilder<Null, string>(producerConfig)
                 .SetKeySerializer(Serializers.Null)
-                .SetValueSerializer(Serializers.Utf8)
+                .SetValueSerializer(new KafkaProducer.Utf8Serializer())//Serializers.Utf8)
                 .SetLogHandler(OnLog)
                 .SetStatisticsHandler((_, json) => _logger.LogInformation($"Statistics: {json}"))
                 .SetErrorHandler(OnError)
@@ -130,5 +133,13 @@ namespace Rebus.Kafka
 
         private void OnError(IProducer<Null, string> sender, Error error)
             => _logger?.LogWarning("Producer error: {error}. No action required.", error);
+
+        public class Utf8Serializer : ISerializer<string>
+        {
+            public byte[] Serialize(string data, SerializationContext context)
+            {
+                return data == null ? (byte[])null : Encoding.UTF8.GetBytes(data);
+            }
+        }
     }
 }

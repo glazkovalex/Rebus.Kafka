@@ -2,13 +2,13 @@
 using Rebus.Bus;
 using Rebus.Exceptions;
 using Rebus.Kafka.Core;
-using Rebus.Kafka.Serialization;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Subscriptions;
 using Rebus.Threading;
 using Rebus.Transport;
 using System;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -32,10 +32,10 @@ namespace Rebus.Kafka
         /// Sends the given <see cref="TransportMessage"/> to the queue with the specified globally addressable name
         /// </summary>
         /// <exception cref="InvalidOperationException">If after waiting the procedure of transport initialization is still incomplete.</exception>
-        public async Task Send(string destinationAddress, TransportMessage message, ITransactionContext context)
+        public async Task Send(string destinationAddress, TransportMessage transportMessage, ITransactionContext context)
         {
             if (destinationAddress == null) throw new ArgumentNullException(nameof(destinationAddress));
-            if (message == null) throw new ArgumentNullException(nameof(message));
+            if (transportMessage == null) throw new ArgumentNullException(nameof(transportMessage));
             if (context == null) throw new ArgumentNullException(nameof(context));
 
             if (_queueSubscriptionStorage?.IsInitialized == false) // waiting for initialization to complete
@@ -43,14 +43,15 @@ namespace Rebus.Kafka
                 lock (_queueSubscriptionStorage)
                     if (_queueSubscriptionStorage?.IsInitialized == false)
                     {
-                        int count = 3000; //5 minutes
+                        const int waitSecont = 300; //5 minutes
+                        int count = waitSecont * 10;
                         _log.Info($"Start waiting for the initialization to complete for {count / 600:N0} minutes...");
                         while (_queueSubscriptionStorage?.IsInitialized == false)
                         {
                             Thread.Sleep(100);
                             if (--count <= 0)
                                 throw new InvalidOperationException(
-                                    $"After waiting for {count / 600:N0} minutes, the procedure of transport initialization is still incomplete."
+                                    $"After waiting for {waitSecont / 60:N0} minutes, the procedure of transport initialization is still incomplete."
                                     + " There is no confirmation of completion of the subscription to the input queue."
                                     + " Try pausing before sending the first message, or handling this exception in a"
                                     + " loop to wait for the consumer's subscription to your queue to complete.");
@@ -59,11 +60,17 @@ namespace Rebus.Kafka
                     }
             }
 
-            DeliveryResult<Ignore, TransportMessage> result = null;
+            DeliveryResult<string, byte[]> result = null;
             try
             {
-                result = await _producer.ProduceAsync(destinationAddress
-                    , new Message<Ignore, TransportMessage> { Value = message });
+                var headers = new Confluent.Kafka.Headers();
+                foreach (var header in transportMessage.Headers)
+                {
+                    headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                }
+                var message = new Message<string, byte[]> { Value = transportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
+                result = await _producer.ProduceAsync(destinationAddress, message);
+                // ToDo: Обрабатывать через транзакцию result.Status
             }
             catch (Exception ex)
             {
@@ -83,7 +90,20 @@ namespace Rebus.Kafka
                 throw new InvalidOperationException("This Kafka transport does not have an input queue - therefore, it is not possible to receive anything");
             try
             {
-                return await _queueSubscriptionStorage.Receive(context, cancellationToken).ConfigureAwait(false);
+                var receivedMesage = await _queueSubscriptionStorage.Receive(context, cancellationToken).ConfigureAwait(false);
+                context.OnDisposed(tc => _log.Debug($"context.OnDisposed : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}"));
+                context.OnCommitted(tc =>
+                {
+                    _log.Debug($"context.OnCommitted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}");
+                    return Task.CompletedTask;
+                });
+                context.OnCompleted(tc =>
+                {
+                    _log.Debug($"context.OnCompleted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}");
+                    return Task.CompletedTask;
+                });
+                context.OnAborted(tc => _log.Debug($"context.OnAborted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}"));
+                return receivedMesage;
             }
             catch (Exception exception)
             {
@@ -125,9 +145,9 @@ namespace Rebus.Kafka
         public void Initialize()
         {
             _log.Info("Initializing Kafka transport with queue {queueName}", Address);
-            var builder = new ProducerBuilder<Ignore, TransportMessage>(_producerConfig)
-                .SetKeySerializer(new IgnoreSerializer())
-                .SetValueSerializer(new TransportMessageSerializer())
+            var builder = new ProducerBuilder<string, byte[]>(_producerConfig)
+                .SetKeySerializer(Serializers.Utf8)
+                .SetValueSerializer(Serializers.ByteArray)
                 .SetLogHandler(ProducerOnLog)
                 .SetStatisticsHandler(ProducerOnStatistics)
                 .SetErrorHandler(ProducerOnError);
@@ -153,14 +173,14 @@ namespace Rebus.Kafka
 
         #region logging
 
-        private void ProducerOnLog(IProducer<Ignore, TransportMessage> sender, LogMessage logMessage)
+        private void ProducerOnLog(IProducer<string, byte[]> sender, LogMessage logMessage)
             => _log.Debug("Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
                 logMessage.Name, logMessage.Level, logMessage.Message);
 
-        private void ProducerOnStatistics(IProducer<Ignore, TransportMessage> sender, string json)
+        private void ProducerOnStatistics(IProducer<string, byte[]> sender, string json)
             => _log.Info($"Producer statistics: {json}");
 
-        private void ProducerOnError(IProducer<Ignore, TransportMessage> sender, Error error)
+        private void ProducerOnError(IProducer<string, byte[]> sender, Error error)
             => _log.Warn("Producer error: {error}. No action required.", error);
 
         #endregion
@@ -175,7 +195,7 @@ namespace Rebus.Kafka
         readonly IAsyncTaskFactory _asyncTaskFactory;
         readonly ILog _log;
 
-        private IProducer<Ignore, TransportMessage> _producer;
+        private IProducer<string, byte[]> _producer;
         private readonly ProducerConfig _producerConfig;
 
         private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
@@ -204,7 +224,7 @@ namespace Rebus.Kafka
                 QueueBufferingMaxKbytes = 10240,
                 //{ "socket.blocking.max.ms", 1 }, // **DEPRECATED * *No longer used.
 #if DEBUG
-				Debug = "msg",
+                Debug = "msg",
 #endif
                 MessageTimeoutMs = 3000,
             };
@@ -296,7 +316,7 @@ namespace Rebus.Kafka
         /// <param name="cancellationToken"></param>
         public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList, string inputQueueName
             , ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig, CancellationToken cancellationToken = default)
-            : this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, (ConsumerConfig)consumerAndBehaviorConfig, cancellationToken) {}
+            : this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, (ConsumerConfig)consumerAndBehaviorConfig, cancellationToken) { }
 
         /// <inheritdoc />
         public void Dispose()

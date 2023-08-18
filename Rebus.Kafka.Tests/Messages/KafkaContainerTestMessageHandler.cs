@@ -6,13 +6,13 @@ using Xunit.Abstractions;
 namespace Rebus.Kafka.Tests.Messages
 {
     /// <inheritdoc />
-    public class MessageHandler2 : IHandleMessages<Message>
+    public class KafkaContainerTestMessageHandler : IHandleMessages<Message>
     {
         /// <inheritdoc />
         public Task Handle(Message evnt)
         {
             Counter.Add(evnt.MessageNumber);
-            _output.WriteLine($"MessageHandler2 received : \"{evnt.MessageNumber}\"");
+            _output.WriteLine($"MessageHandler received : \"{evnt.MessageNumber}\"");
             return Task.CompletedTask;
         }
 
@@ -20,7 +20,7 @@ namespace Rebus.Kafka.Tests.Messages
         private readonly ITestOutputHelper _output;
 
         /// <summary>Creates new instance <see cref="MessageHandler"/>.</summary>
-        public MessageHandler2(ITestOutputHelper output)
+        public KafkaContainerTestMessageHandler(ITestOutputHelper output)
         {
             _output = output;
         }

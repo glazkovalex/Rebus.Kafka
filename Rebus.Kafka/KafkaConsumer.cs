@@ -4,9 +4,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Kafka.Configs;
+using Confluent.Kafka.Admin;
 
 namespace Rebus.Kafka
 {
@@ -75,17 +77,17 @@ namespace Rebus.Kafka
         public IObservable<Message<Null, string>> Consume(IEnumerable<string> topics)
         {
             _topics = topics;
+            ConsumerSubscibble(topics);
             var observable = Observable.Create<Message<Null, string>>((observer, cancellationToken) =>
             {
                 var task = Task.Factory.StartNew(
                     () =>
                     {
-                        _consumer.Subscribe(topics);
+
                         try
                         {
                             while (!cancellationToken.IsCancellationRequested)
                             {
- 
                                 var consumeResult = _consumer.Consume(cancellationToken);
                                 if (consumeResult.IsPartitionEOF)
                                 {
@@ -127,17 +129,61 @@ namespace Rebus.Kafka
             });
             return observable;
         }
-		/// <summary>Commits an offset based on the topic/partition/offset of a ConsumeResult.</summary>
-		/// <param name="cancellationToken"></param>
-		/// <returns>The ConsumeResult instance used to determine the committed offset.</returns>
-		public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken) => _consumer.Commit();
-		/// <summary>Internal Consumer</summary>
-		public IConsumer<Null, string> Consumer => _consumer;
+
+        void ConsumerSubscibble(IEnumerable<string> topics)
+        {
+            if (topics == null || topics.Count() == 0)
+                return;
+
+            if (_config.AllowAutoCreateTopics == true)
+            {
+                if (string.IsNullOrEmpty(_config?.BootstrapServers))
+                    throw new ArgumentException("BootstrapServers it shouldn't be null!");
+
+                using (var adminClient = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = _config.BootstrapServers }).Build())
+                {
+                    var existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
+                        .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
+                        .Select(t => t.Topic);
+                    var missingTopics = topics.Where(t => !existingsTopics.Contains(t));
+                    if (missingTopics.Any())
+                    {
+                        try
+                        {
+                            adminClient.CreateTopicsAsync(missingTopics.Select(mt => new TopicSpecification { Name = mt, ReplicationFactor = 1, NumPartitions = 1 }),
+                                new CreateTopicsOptions { ValidateOnly = false }).GetAwaiter().GetResult();
+                            existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
+                                .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
+                                .Select(t => t.Topic);
+                            missingTopics = topics.Where(t => !existingsTopics.Contains(t));
+                            if (missingTopics.Any())
+                            {
+                                throw new ArgumentException($"Failed to create topics: \"{string.Join("\", \"", missingTopics)}\"!", nameof(topics));
+                            }
+                        }
+                        catch (CreateTopicsException e)
+                        {
+                            _logger.LogError($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
+                            throw;
+                        }
+                    }
+                }
+            }
+            _consumer.Subscribe(topics);
+        }
+
+        /// <summary>Commits an offset based on the topic/partition/offset of a ConsumeResult.</summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns>The ConsumeResult instance used to determine the committed offset.</returns>
+        public List<TopicPartitionOffset> Commit(CancellationToken cancellationToken) => _consumer.Commit();
+        /// <summary>Internal Consumer</summary>
+        public IConsumer<Null, string> Consumer => _consumer;
 
         #region Скучное
 
-        private readonly IConsumer<Null, string> _consumer;
         private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
+        private readonly IConsumer<Null, string> _consumer;
+        private readonly ConsumerConfig _config;
         private readonly ILogger<KafkaConsumer> _logger;
         private IEnumerable<string> _topics;
 
@@ -150,7 +196,7 @@ namespace Rebus.Kafka
             _logger = logger;
             if (string.IsNullOrWhiteSpace(brokerList))
                 throw new NullReferenceException(nameof(brokerList));
-            var config = new ConsumerConfig
+            _config = new ConsumerConfig
             {
                 BootstrapServers = brokerList,
                 ApiVersionRequest = true,
@@ -166,18 +212,18 @@ namespace Rebus.Kafka
 #endif
                 AutoOffsetReset = AutoOffsetReset.Latest,
                 EnablePartitionEof = true,
-                AllowAutoCreateTopics = true
+                AllowAutoCreateTopics = true,
             };
-            config.Set("fetch.message.max.bytes", "10240");
+            _config.Set("fetch.message.max.bytes", "10240");
 
             // Note: If a key or value deserializer is not set (as is the case below), the 
             // deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
             // will be used automatically (where available). The default deserializer for string
             // is UTF8. The default deserializer for Ignore returns null for all input data
             // (including non-null data).
-            _consumer = new ConsumerBuilder<Null, string>(config)
+            _consumer = new ConsumerBuilder<Null, string>(_config)
                 .SetKeyDeserializer(Deserializers.Null)
-                .SetValueDeserializer(Deserializers.Utf8)
+                .SetValueDeserializer(new KafkaConsumer.Utf8Deserializer()) //)Deserializers.Utf8)
                 .SetLogHandler(OnLog)
                 .SetErrorHandler(OnError)
                 .SetStatisticsHandler((_, json) => Console.WriteLine($"Statistics: {json}"))
@@ -210,14 +256,15 @@ namespace Rebus.Kafka
             if (string.IsNullOrEmpty(consumerConfig.GroupId))
                 consumerConfig.GroupId = Guid.NewGuid().ToString("N");
 
+            _config = consumerConfig;
             // Note: If a key or value deserializer is not set (as is the case below), the 
             // deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
             // will be used automatically (where available). The default deserializer for string
             // is UTF8. The default deserializer for Ignore returns null for all input data
             // (including non-null data).
-            _consumer = new ConsumerBuilder<Null, string>(consumerConfig)
+            _consumer = new ConsumerBuilder<Null, string>(_config)
                 .SetKeyDeserializer(Deserializers.Null)
-                .SetValueDeserializer(Deserializers.Utf8)
+                .SetValueDeserializer(new KafkaConsumer.Utf8Deserializer()) //)Deserializers.Utf8)
                 .SetLogHandler(OnLog)
                 .SetErrorHandler(OnError)
                 .SetStatisticsHandler((_, json) => _logger.LogInformation($"Statistics: {json}"))
@@ -237,7 +284,7 @@ namespace Rebus.Kafka
         /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
         /// </param>
         /// <param name="logger"></param>
-        public KafkaConsumer(ConsumerAndBehaviorConfig consumerAndBehaviorConfig, ILogger<KafkaConsumer> logger = null) 
+        public KafkaConsumer(ConsumerAndBehaviorConfig consumerAndBehaviorConfig, ILogger<KafkaConsumer> logger = null)
             : this((ConsumerConfig)consumerAndBehaviorConfig, logger)
         {
             _behaviorConfig = consumerAndBehaviorConfig.BehaviorConfig;
@@ -263,7 +310,7 @@ namespace Rebus.Kafka
                 _logger?.LogError(
                     "Fatal error consuming from Kafka. Topic/partition/offset: '{topic}/{partition}/{offset}'. Error: '{error}'.",
                     string.Join(",", values.Select(a => a.Topic)),
-                    string.Join(",", values.Select(a => a.Partition)),
+                    string.Join(",", values.Select(a => a.Partition.Value)),
                     string.Join(",", values.Select(sender.Position)),
                     error.Reason);
                 throw new KafkaException(error);
@@ -272,14 +319,14 @@ namespace Rebus.Kafka
 
         private void ConsumerOnPartitionsAssigned(IConsumer<Null, string> sender, List<TopicPartition> partitions)
         {
-            _logger?.LogInformation($"Assigned partitions: [{string.Join(", ", partitions.Select(p => p.Partition))}]");
+            _logger?.LogInformation($"Assigned partitions: [{string.Join(", ", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             // possibly override the default partition assignment behavior:
             // consumer.Assign(...) 
         }
 
         private void ConsumerOnPartitionsRevoked(IConsumer<Null, string> sender, List<TopicPartitionOffset> partitionOffsets)
         {
-            _logger?.LogInformation($"Revoked partitions: [{string.Join(", ", partitionOffsets.Select(po => po.Partition))}]");
+            _logger?.LogInformation($"Revoked partitions: [{string.Join(", ", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             // consumer.Unassign()
         }
 
@@ -294,5 +341,13 @@ namespace Rebus.Kafka
         }
 
         #endregion
+
+        private class Utf8Deserializer : IDeserializer<string>
+        {
+            public string Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
+            {
+                return isNull ? (string)null : Encoding.UTF8.GetString(data.ToArray());
+            }
+        }
     }
 }
