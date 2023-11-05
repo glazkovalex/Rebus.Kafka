@@ -174,6 +174,10 @@ namespace Rebus.Kafka.Core
                             {
                                 throw new ArgumentException($"Failed to create topics: \"{string.Join("\", \"", missingTopics)}\"!", nameof(topics));
                             }
+                            else
+                            {
+                                _log.Warn($"The consumer configuration specifies \"AllowAutoCreateTopics = true\", so topics were automatically created: {string.Join(",", missingTopics)}!\nIt is better that the topics are not created by the bus.");
+                            }
                         }
                         catch (CreateTopicsException e)
                         {
