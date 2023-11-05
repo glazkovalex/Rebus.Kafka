@@ -178,7 +178,7 @@ namespace Rebus.Kafka.Core
                         catch (CreateTopicsException e)
                         {
                             _log.Error($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
-                            //throw;
+                            throw;
                         }
                     }
                 }

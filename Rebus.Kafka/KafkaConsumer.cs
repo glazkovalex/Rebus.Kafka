@@ -164,7 +164,7 @@ namespace Rebus.Kafka
                         catch (CreateTopicsException e)
                         {
                             _logger.LogError($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
-                            //throw;
+                            throw;
                         }
                     }
                 }
