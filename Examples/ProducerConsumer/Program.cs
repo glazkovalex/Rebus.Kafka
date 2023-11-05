@@ -85,7 +85,7 @@ namespace ProducerConsumer
             return services.BuildServiceProvider().CreateScope();
         }
 
-        static readonly string _kafkaEndpoint = "127.0.0.1:9092";
+        static readonly string _kafkaEndpoint = "confluent-kafka:9092";
         private static readonly string bTopicNameResp = "b_name_response";
         private static readonly string gTopicNameResp = "g_name_response";
         private static readonly string[] _boyNames =

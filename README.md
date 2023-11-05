@@ -36,6 +36,13 @@ if (!Library.IsLoaded)
 - Due to the features of Apache Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario will work very slowly. I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast.
 
 ### Log of important changes:
+#### V 2.0.0 (18.08.2023)
+1. Improving data transfer efficiency; 
+2. The format of transport messages has changed. In them now the key is not Null, but string. The messages are incompatible with previous versions of the transport!
+3. Message headers are now supported;
+4. Refactoring for the current version of Apache Kafka "confluentinc/cp-kafka:7.0.1"; 
+5. Transport forcibly creates missing topics if Consumer.Config.AllowAutoCreateTopics == true; However, I do not recommend using allow.auto.create.topics=true for production! 
+
 #### V 1.6.3 (1.04.2021)
 1. The [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) has a new overload with the [ConsumerAndBehaviorConfig](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka/Configs/ConsumerAndBehaviorConfig.cs) parameter instead of ConsumerConfig. This new configuration type contains transport behavior settings. So far, it has a single [CommitPeriod](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka/Configs/ConsumerBehaviorConfig.cs) parameter that defines the period after which the commit offset will be set in Apache Kafka. [Here is an example of using it ](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka.Tests/SimpleTests.cs#L69)
 
@@ -44,13 +51,6 @@ if (!Library.IsLoaded)
  
 	At the request of the transport users, I enabled the previous transport behavior by default. **Now the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default as before**. 
 	However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
-
-#### V 2.0.0 (18.08.2023)
-1. Improving data transfer efficiency; 
-2. The format of transport messages has changed. In them now the key is not Null, but string. The messages are incompatible with previous versions of the transport!
-3. Message headers are now supported;
-4. Refactoring for the current version of Apache Kafka "confluentinc/cp-kafka:7.0.1"; 
-5. Transport forcibly creates missing topics if Consumer.Config.AllowAutoCreateTopics == true; However, I do not recommend using allow.auto.create.topics=true for production! 
 
 ### ToDo:
 - In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.

@@ -87,7 +87,7 @@ namespace Scaleout.Producer
 				bus.Unsubscribe<Confirmation>().Wait(); // only for test
 			}
 		}
-		static readonly string _kafkaEndpoint = "127.0.0.1:9092";
+		static readonly string _kafkaEndpoint = "confluent-kafka:9092";
 		public static readonly int ItemCount = 10;
 	}
 }

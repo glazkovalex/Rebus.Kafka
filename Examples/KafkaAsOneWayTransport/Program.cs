@@ -61,6 +61,6 @@ namespace KafkaAsOneWayTransport
 		}
 
 		const int MessageCount = 10;
-		static readonly string kafkaEndpoint = "127.0.0.1:9092";
+		static readonly string kafkaEndpoint = "confluent-kafka:9092";
 	}
 }
