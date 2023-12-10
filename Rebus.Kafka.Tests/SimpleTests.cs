@@ -198,6 +198,47 @@ namespace Rebus.Kafka.Tests
         }
 
         [Fact]
+        public async Task TwoPublishTwoSubscribe()
+        {
+            IContainer container;
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
+            builder.RegisterType<SecondMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(SecondMessage)));
+            builder.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(BootstrapServer, nameof(SimpleTests)))
+                .Options(o => o.SetMaxParallelism(5))
+            );
+            MessageHandler.Counter.Reset();
+            using (container = builder.Build())
+            using (IBus bus = container.Resolve<IBus>())
+            {
+                await bus.Subscribe<Message>();
+                await bus.Subscribe<SecondMessage>();
+                var sendAmount = 0;
+                var messages = Enumerable.Range(1, MessageCount)
+                    .Select(i =>
+                    {
+                        sendAmount = sendAmount + i;
+                        return bus.Publish(new Message { MessageNumber = i });
+                    })
+                    .Concat(Enumerable.Range(1, MessageCount)
+                        .Select(i =>
+                        {
+                            sendAmount = sendAmount + i;
+                            return bus.Publish(new SecondMessage { MessageNumber = i });
+                        })
+                    ).ToArray();
+                
+                Task.WaitAll(messages);
+                await Task.Delay(10000);
+
+                Assert.Equal(MessageHandler.Counter.Amount + SecondMessageHandler.Counter.Amount, sendAmount);
+            }
+        }
+
+        [Fact]
         public async Task TwoPublishSameEvent()
         {
             var builder1 = new ContainerBuilder();
@@ -352,7 +393,7 @@ namespace Rebus.Kafka.Tests
 
         public SimpleTests(ITestOutputHelper output) : base(output)
         {
-            
+
         }
     }
 }

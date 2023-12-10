@@ -57,8 +57,7 @@ namespace Scaleout.Producer
 			builder.RegisterType<ConfirmationHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Confirmation)));
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
-				.Transport(t => t.UseKafka(_kafkaEndpoint
-					, "scaleout.producer", producerConfig, consumerConfig))
+				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
 				.Routing(r => r.TypeBased().Map<TestMessage>("scaleout.consumers"))
 			);
 
