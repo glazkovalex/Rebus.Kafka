@@ -58,7 +58,7 @@ namespace Scaleout.Producer
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
-				//.Routing(r => r.TypeBased().MapAssemblyOf<TestMessage>("scaleout.consumers"))
+				.Routing(r => r.TypeBased().Map<TestMessage>("scaleout.consumers"))
 			);
 
 			using (container = builder.Build())
@@ -76,15 +76,8 @@ namespace Scaleout.Producer
 						{
 							sendAmount = sendAmount + i;
 							return bus.Publish(new TestMessage { MessageNumber = i });
-						}).Concat(Enumerable.Range(1, ItemCount)
-                        .Select(i =>
-                        {
-							int value = i + 10;
-                            sendAmount = sendAmount + value;
-                            return bus.Publish(new TestMessage2 { MessageNumber = value });
-                        })
-                    ).ToArray();
-                    Task.WaitAll(messages);
+						}).ToArray();
+					Task.WaitAll(messages);
 					Console.WriteLine($"Send: {sendAmount} for {sw.ElapsedMilliseconds / 1000f:N3}c");
 					Console.WriteLine("Press any key to exit or 'r' to repeat.");
 					key = Console.ReadKey().KeyChar;

@@ -15,8 +15,7 @@ namespace Scaleout.Consumers
 			IContainer container;
 			var builder = new ContainerBuilder();
 			builder.RegisterType<TestMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(TestMessage)));
-            builder.RegisterType<TestMessageHandler2>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(TestMessage2)));
-            builder.RegisterRebus((configurer, context) => configurer
+			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint
 					, "scaleout.consumers", "commonGroupForScaleout"))
@@ -27,8 +26,7 @@ namespace Scaleout.Consumers
 			using (IBus bus = container.Resolve<IBus>())
 			{
 				bus.Subscribe<TestMessage>().Wait();
-                bus.Subscribe<TestMessage2>().Wait();
-                Console.WriteLine($"If your Kafka \"num.partitions\" > 1 to start the second instance of \"Scaleout.Consumers\"");
+				Console.WriteLine($"If your Kafka \"num.partitions\" > 1 to start the second instance of \"Scaleout.Consumers\"");
 				Console.WriteLine("Waiting for messages. Press any key to exit.");
 				Console.ReadKey();
 				bus.Unsubscribe<TestMessage>().Wait(); // only for test
