@@ -1,5 +1,4 @@
-﻿using System;
-using System.Linq;
+﻿using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
@@ -10,11 +9,9 @@ using Rebus.Handlers;
 using Rebus.Kafka.Tests.Core;
 using Rebus.Kafka.Tests.ErrorHandling;
 using Rebus.Kafka.Tests.Messages;
-using Rebus.Logging;
-using Rebus.Retry;
+using Rebus.Persistence.InMem;
 using Rebus.Retry.Simple;
 using Rebus.Routing.TypeBased;
-using Rebus.Transport.InMem;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -22,7 +19,7 @@ namespace Rebus.Kafka.Tests
 {
     public class ErrorHandlingTests : BaseTestWithKafkaContainer
     {
-        [Fact(Skip = "Doesn't work at the moment")]
+        [Fact]
         public async Task HandlingErrorInSubscribe()
         {
             IContainer container;
@@ -34,7 +31,7 @@ namespace Rebus.Kafka.Tests
                 .Transport(t => t.UseKafka(BootstrapServer, nameof(ErrorHandlingTests)))
                 .Options(o =>
                 {
-                    o.SimpleRetryStrategy();
+                    o.RetryStrategy(maxDeliveryAttempts: maxDeliveryAttempts);
                     o.SetMaxParallelism(5);
                 })
             );
@@ -47,21 +44,20 @@ namespace Rebus.Kafka.Tests
                 var messages = Enumerable.Range(1, MessageCount)
                     .Select(i =>
                     {
-                        sendAmount = sendAmount + i;
+                        Interlocked.Add(ref sendAmount, i);
                         return bus.Publish(new RetriesMessage { MessageNumber = i });
                     }).ToArray();
 
                 Task.WaitAll(messages);
                 await Task.Delay(10000);
 
-                Assert.Equal(Counter.Amount, sendAmount * 3);
+                Assert.Equal(sendAmount + (maxDeliveryAttempts - 1) * 2, Counter.Amount);
             }
         }
 
-        [Fact(Skip = "Doesn't work at the moment")]
+        [Fact]
         public async Task RetriesOnError()
         {
-            const int numberOfRetries = 5;
             const string inputQueueName = "test.error.handling.tests";
             var handlerActivator = new BuiltinHandlerActivator();
 
@@ -73,8 +69,7 @@ namespace Rebus.Kafka.Tests
                 {
                     o.SetNumberOfWorkers(1);
                     o.SetMaxParallelism(1);
-
-                    o.SimpleRetryStrategy(maxDeliveryAttempts: numberOfRetries, errorQueueAddress: "retries.on.error.queue");
+                    o.RetryStrategy(maxDeliveryAttempts: maxDeliveryAttempts, errorQueueName: "retries.on.error.queue");
                 })
                 .Start();
 
@@ -88,7 +83,7 @@ namespace Rebus.Kafka.Tests
                 handlerActivator.Handle<string>(async _ =>
                 {
                     Interlocked.Increment(ref attemptedDeliveries);
-                    //throw new InvalidOperationException("omgwtf!");
+                    throw new System.InvalidOperationException("omgwtf!");
                 });
             }
             Action();
@@ -98,13 +93,67 @@ namespace Rebus.Kafka.Tests
 
             await Task.Delay(10000);
 
-            Assert.Equal(numberOfRetries, attemptedDeliveries);
+            Assert.Equal(maxDeliveryAttempts, attemptedDeliveries);
+        }
+
+        [Fact]
+        public async Task SecondLevelRetries()
+        {
+            var maxDelivery = 2;
+            IContainer container;
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder.RegisterType<RetriesMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(RetriesMessage)));
+            builder.RegisterType<RetriesMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(IFailed<RetriesMessage>)));
+            builder.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(BootstrapServer, nameof(ErrorHandlingTests)))
+                .Timeouts(t => t.StoreInMemory())
+                .Options(o =>
+                {
+                    o.RetryStrategy(maxDeliveryAttempts: maxDelivery, secondLevelRetriesEnabled: true);
+                    o.SetMaxParallelism(1);
+                })
+            );
+
+            await using (container = builder.Build())
+            using (IBus bus = container.Resolve<IBus>())
+            {
+                await bus.Subscribe<RetriesMessage>();
+                var sendAmount = 0;
+                var messages = Enumerable.Range(1, MessageCount)
+                    .Select(i =>
+                    {
+                        Interlocked.Add(ref sendAmount, i);
+                        return bus.Publish(new RetriesMessage { MessageNumber = i });
+                    }).ToArray();
+                Task.WaitAll(messages);
+                await Task.Delay(10000);
+                messages = Enumerable.Range(MessageCount + 1, MessageCount)
+                    .Select(i =>
+                    {
+                        Interlocked.Add(ref sendAmount, i);
+                        return bus.Publish(new RetriesMessage { MessageNumber = i });
+                    }).ToArray();
+                Task.WaitAll(messages);
+                await Task.Delay(10000);
+                messages = Enumerable.Range(MessageCount * 2 +1, MessageCount)
+                    .Select(i =>
+                    {
+                        Interlocked.Add(ref sendAmount, i);
+                        return bus.Publish(new RetriesMessage { MessageNumber = i });
+                    }).ToArray();
+                Task.WaitAll(messages);
+                await Task.Delay(10000);
+                Assert.Equal(sendAmount + ((maxDelivery + 1 /*Handle IFailed*/) * 3 /*restarts*/ - 1) * 2, Counter.Amount);
+            }
         }
 
         #region Settings
 
         internal static Counter Counter;
-        const int MessageCount = 1;
+        const int MessageCount = 10;
+        const int maxDeliveryAttempts = 3;
 
         /// <summary>Creates new instance <see cref="SimpleTests"/>.</summary>
         public ErrorHandlingTests(ITestOutputHelper output) : base(output)

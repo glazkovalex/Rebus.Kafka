@@ -23,7 +23,7 @@ builder.RegisterRebus((configurer, context) => configurer
 );
 ```
 
-See examples and tests for other usage examples.
+See [examples](https://github.com/glazkovalex/Rebus.Kafka/tree/master/Examples) and [tests](https://github.com/glazkovalex/Rebus.Kafka/tree/master/Rebus.Kafka.Tests) for other usage examples.
 
 ### Note: 
 - So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the appropriate version of the package "[librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist)". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use [Rebus.Kafka](https://github.com/glazkovalex/Rebus.Kafka) for the first time as follows:
@@ -36,6 +36,11 @@ if (!Library.IsLoaded)
 - Due to the features of Apache Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario will work very slowly. I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast.
 
 ### Log of important changes:
+#### V 3.0.0 (08.01.2024)
+1. Refactoring for Rebus version 8 with the corresponding API change;
+2. Implemented RetryStrategy - [automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling). Confirmations of receipt of messages are now sent not after they are received, but only after successful processing of messages or sending them to the error topic. The maximum message reception performance has now decreased by about 20%, With CommitPeriod = 5, the bus slows down message reception by one and a half times compared to native transport; 
+3. Add ["transaction"](https://github.com/rebus-org/Rebus/wiki/Transactions) support. More precisely, not transactions, because Apache Kafka does not support transactions, but delayed sending of all transaction messages before calling await scope.Complete Async() or canceling the sending of all "sent" messages at the end of the transaction block without calling await scope.Complete Async(). This convenience slows down the maximum performance of sending all messages by half, even those messages that are sent without transactions.
+
 #### V 2.0.0 (18.08.2023)
 1. Improving data transfer efficiency; 
 2. The format of transport messages has changed. In them now the key is not Null, but string. The messages are incompatible with previous versions of the transport!
@@ -54,8 +59,6 @@ if (!Library.IsLoaded)
 
 ### ToDo:
 - In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
-- Add SimpleRetryStrategy support.
-- Add transaction support.
 
 ---
 If you have any recommendations or comments, I will be glad to hear.

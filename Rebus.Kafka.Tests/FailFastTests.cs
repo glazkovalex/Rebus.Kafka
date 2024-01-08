@@ -52,7 +52,7 @@ namespace Rebus.Kafka.Tests
                     o.SetNumberOfWorkers(1);
                     o.SetMaxParallelism(1);
 
-                    o.SimpleRetryStrategy(maxDeliveryAttempts: numberOfRetries, errorQueueAddress: ErrorQueueName);
+                    o.RetryStrategy(maxDeliveryAttempts: numberOfRetries, errorQueueName: ErrorQueueName);
 
                     if (failFastChecker != null)
                     {

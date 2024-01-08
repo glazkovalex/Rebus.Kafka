@@ -14,6 +14,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Kafka.Configs;
 using Confluent.Kafka.Admin;
+using Rebus.Exceptions;
+using Rebus.Kafka.Dispatcher;
 
 namespace Rebus.Kafka.Core
 {
@@ -25,19 +27,34 @@ namespace Rebus.Kafka.Core
         /// </summary>
         internal Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
         {
-            bool resume = false;
-            ConsumeResult<string, byte[]> consumeResult = null;
-            do
+            if (_commitDispatcher.TryConsumeMessageToRestarted(out TransportMessage reprocessMessage) == false)
             {
-                try
+                bool resume = false;
+                ConsumeResult<string, byte[]> consumeResult = null;
+                do
                 {
-                    consumeResult = _consumer.Consume(cancellationToken);
-                    resume = consumeResult.IsPartitionEOF;
-                    if (resume)
+                    try
                     {
-                        //_logger?.LogInformation($"Reached end of topic {consumeResult.Topic}, partition {consumeResult.Partition}.");
-                        continue;
+                        consumeResult = _consumer.Consume(cancellationToken);
+                        resume = consumeResult.IsPartitionEOF;
                     }
+                    catch (OperationCanceledException e)
+                    {
+                        _log?.Info($"Consume warning: {e.Message}");
+                        resume = false;
+                        consumeResult = null;
+                    }
+                    catch (ConsumeException e)
+                    {
+                        _log?.Error($"Consume error: {e.Error}");
+                    }
+                } while (resume);
+
+                if (consumeResult != null)
+                {
+                    var headers = consumeResult.Message?.Headers.ToDictionary(k => k.Key,
+                    v => System.Text.Encoding.UTF8.GetString(v.GetValueBytes())) ?? new Dictionary<string, string>();
+                    TransportMessage transportMessage = new TransportMessage(headers, consumeResult.Message?.Value ?? new byte[0]);
 
                     if (consumeResult.Offset % _behaviorConfig.CommitPeriod == 0)
                     {
@@ -47,34 +64,27 @@ namespace Rebus.Kafka.Core
                         // consuming messages. A high performance application will typically
                         // commit offsets relatively infrequently and be designed handle
                         // duplicate messages in the event of failure.
-                        _consumer.Commit(consumeResult);
+                        _commitDispatcher.AppendMessageInQueue(transportMessage, consumeResult.TopicPartitionOffset); 
+                        _consumer.Commit(new[] { consumeResult.TopicPartitionOffset });
                     }
+                    else
+                    {
+                        _commitDispatcher.AppendMessage(transportMessage, consumeResult.TopicPartitionOffset);
+                    }
+                    return Task.FromResult(transportMessage);
                 }
-                catch (OperationCanceledException e)
-                {
-                    _log?.Info($"Consume warning: {e.Message}");
-                    resume = false;
-                    consumeResult = null;
-                }
-                catch (ConsumeException e)
-                {
-                    _log?.Error($"Consume error: {e.Error}");
-                }
-            } while (resume);
-
-            if (consumeResult != null)
-            {
-                var headers = consumeResult.Message?.Headers.ToDictionary(k => k.Key,
-                    v => System.Text.Encoding.UTF8.GetString(v.GetValueBytes())) ?? new Dictionary<string, string>();
-                return Task.FromResult(new TransportMessage(headers, consumeResult.Message?.Value ?? new byte[0]));
+                return Task.FromResult<TransportMessage>(null);
             }
-            return Task.FromResult<TransportMessage>(null);
+            else
+            {
+                return Task.FromResult(reprocessMessage);
+            }
         }
 
         /// <inheritdoc />
-        public Task<string[]> GetSubscriberAddresses(string topic)
+        public Task<IReadOnlyList<string>> GetSubscriberAddresses(string topic)
         {
-            return Task.FromResult(new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
+            return Task.FromResult((IReadOnlyList<string>)new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
         }
 
         /// <inheritdoc />
@@ -85,7 +95,7 @@ namespace Rebus.Kafka.Core
             var tcs = new TaskCompletionSource<bool>();
             //CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
             _waitAssigned.TryAdd(topics, new KeyValuePair<string, TaskCompletionSource<bool>>(topic, tcs));
-            ConsumerSubscibble(topics);
+            ConsumerSubscribe(topics);
             return tcs.Task;
         }
 
@@ -105,16 +115,56 @@ namespace Rebus.Kafka.Core
             //CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
             _waitRevoked.TryAdd(toUnregister, new KeyValuePair<string, TaskCompletionSource<bool>>(topic, tcs));
             if (topics.Any())
-                ConsumerSubscibble(topics);
+                ConsumerSubscribe(topics);
             else
                 _consumer.Close();
             return tcs.Task;
         }
 
-        internal void CreateQueue(string address)
+        internal void CreateQueues(params string[] topics)
         {
-            _subscriptions.TryAdd(address, new[] { address });
-            ConsumerSubscibble(_subscriptions.SelectMany(a => a.Value));
+            if (string.IsNullOrEmpty(_config?.BootstrapServers))
+                throw new ArgumentException("BootstrapServers it shouldn't be null!");
+
+            using (var adminClient = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = _config.BootstrapServers }).Build())
+            {
+                var existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
+                    .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
+                    .Select(t => t.Topic).ToList();
+                var missingTopics = topics.Where(t => !existingsTopics.Contains(t)).ToList();
+                if (missingTopics.Any())
+                {
+                    if (_config.AllowAutoCreateTopics == true)
+                    {
+                        try
+                        {
+                            adminClient.CreateTopicsAsync(missingTopics.Select(mt => new TopicSpecification { Name = mt, ReplicationFactor = 1, NumPartitions = 1 }),
+                                new CreateTopicsOptions { ValidateOnly = false }).GetAwaiter().GetResult();
+                            existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
+                                .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
+                                .Select(t => t.Topic).ToList();
+                            var stillMissingTopics = topics.Where(t => !existingsTopics.Contains(t)).ToList();
+                            if (stillMissingTopics.Any())
+                            {
+                                throw new ArgumentException($"Failed to create topics: \"{string.Join("\", \"", stillMissingTopics)}\"!", nameof(topics));
+                            }
+                            else
+                            {
+                                _log.Warn($"The consumer configuration specifies \"AllowAutoCreateTopics = true\", so topics were automatically created: {string.Join(",", missingTopics)}!\nIt is better that the topics are not created by the bus.");
+                            }
+                        }
+                        catch (CreateTopicsException e)
+                        {
+                            _log.Error($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
+                            throw;
+                        }
+                    }
+                    else
+                    {
+                        _log.Warn($"There are not enough topics: {string.Join(",", missingTopics)}. Create them using the built-in tools. If you enable \"Allow Auto Create Topics = true\" in the consumer configuration, then the bus transport will create these topics automatically, but this is NOT recommended in production!");
+                    }
+                }
+            }
         }
 
         /// <inheritdoc />
@@ -138,71 +188,56 @@ namespace Rebus.Kafka.Core
                 .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
                 .Build();
 
+            _commitDispatcher.OnCanCommit(tpos => _consumer.Commit(tpos));
+
             var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
             var tcs = new TaskCompletionSource<bool>();
             _waitAssigned.TryAdd(topics, new KeyValuePair<string, TaskCompletionSource<bool>>(topics.First(), tcs));
-            ConsumerSubscibble(topics);
+            ConsumerSubscribe(topics);
             _initializationTask = tcs.Task;
         }
 
-        void ConsumerSubscibble(IEnumerable<string> topics)
+        void ConsumerSubscribe(IEnumerable<string> topics)
         {
             if (topics == null || topics.Count() == 0)
                 return;
-            if (_config.AllowAutoCreateTopics == true)
-            {
-                if (string.IsNullOrEmpty(_config?.BootstrapServers))
-                    throw new ArgumentException("BootstrapServers it shouldn't be null!");
 
-                using (var adminClient = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = _config.BootstrapServers }).Build())
-                {
-                    var existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
-                        .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
-                        .Select(t => t.Topic);
-                    var missingTopics = topics.Where(t => !existingsTopics.Contains(t));
-                    if (missingTopics.Any())
-                    {
-                        try
-                        {
-                            adminClient.CreateTopicsAsync(missingTopics.Select(mt => new TopicSpecification { Name = mt, ReplicationFactor = 1, NumPartitions = 1 }),
-                                new CreateTopicsOptions { ValidateOnly = false }).GetAwaiter().GetResult();
-                            existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
-                                .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)
-                                .Select(t => t.Topic);
-                            missingTopics = topics.Where(t => !existingsTopics.Contains(t));
-                            if (missingTopics.Any())
-                            {
-                                throw new ArgumentException($"Failed to create topics: \"{string.Join("\", \"", missingTopics)}\"!", nameof(topics));
-                            }
-                            else
-                            {
-                                _log.Warn($"The consumer configuration specifies \"AllowAutoCreateTopics = true\", so topics were automatically created: {string.Join(",", missingTopics)}!\nIt is better that the topics are not created by the bus.");
-                            }
-                        }
-                        catch (CreateTopicsException e)
-                        {
-                            _log.Error($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
-                            throw;
-                        }
-                    }
-                }
-            }
+            CreateQueues(topics.ToArray());
             _consumer.Subscribe(topics);
+        }
+
+        /// <summary>
+        /// Confirmation of the message
+        /// </summary>
+        /// <param name="message"></param>
+        internal void Ack(TransportMessage message)
+        {
+            Result result = _commitDispatcher.Completing(message);
+            if (result.Failure)
+                throw new RebusApplicationException($"Failed to confirm message processing. ({result.Reason})");
+        }
+
+        /// <summary>
+        /// Not confirmation of the message for reprocessing
+        /// </summary>
+        /// <param name="message"></param>
+        internal void Nack(TransportMessage message)
+        {
+            Result result = _commitDispatcher.Reprocessing(message);
+            if (result.Failure)
+                throw new RebusApplicationException($"Failed to not confirm message processing. ({result.Reason})");
         }
 
         internal bool IsInitialized => _initializationTask?.IsCompleted == true;
         private Task _initializationTask;
+        private CommitDispatcher _commitDispatcher;
 
         #region logging
 
         private void ConsumerOnLog(IConsumer<string, byte[]> sender, LogMessage logMessage)
         {
             if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
-                _log.Debug(
-                    "Consuming from Kafka. Client: '{client}', syslog level: '{logLevel}', message: '{logMessage}'.",
-                    logMessage.Name,
-                    logMessage.Level,
-                    logMessage.Message);
+                _log.Debug($"Consuming from Kafka. Client: '{logMessage.Name}', message: '{logMessage.Message}'.");
         }
 
         private void ConsumerOnStatistics(IConsumer<string, byte[]> sender, string json)
@@ -324,6 +359,7 @@ namespace Rebus.Kafka.Core
             _cancellationToken = cancellationToken;
 
             _subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
+            _commitDispatcher = new CommitDispatcher(_log);
         }
 
         internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
@@ -353,6 +389,7 @@ namespace Rebus.Kafka.Core
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
             _cancellationToken = cancellationToken;
             _subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
+            _commitDispatcher = new CommitDispatcher(_log);
         }
 
         internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList

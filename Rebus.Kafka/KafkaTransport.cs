@@ -13,29 +13,33 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Rebus.Kafka.Configs;
+using System.Collections.Generic;
+using Rebus.Kafka.Extensions;
+using System.Linq;
 
 namespace Rebus.Kafka
 {
     /// <summary>Implementation of Apache Kafka Transport for Rebus</summary>
-    public class KafkaTransport : ITransport, IInitializable, IDisposable, ISubscriptionStorage
+    public class KafkaTransport : AbstractRebusTransport, IInitializable, IDisposable, ISubscriptionStorage
     {
         /// <inheritdoc />
-        public void CreateQueue(string address)
+        public override void CreateQueue(string address)
         {
             // one-way client does not create any queues
             if (Address == null || _queueSubscriptionStorage == null)
                 return;
-            _queueSubscriptionStorage.CreateQueue(address);
+            _queueSubscriptionStorage.CreateQueues(address);
         }
-
+        
         /// <summary>
-        /// Sends the given <see cref="TransportMessage"/> to the queue with the specified globally addressable name
+        /// Sends all outgoing <see cref="TransportMessage"/> to the queue with the specified globally addressable name
         /// </summary>
         /// <exception cref="InvalidOperationException">If after waiting the procedure of transport initialization is still incomplete.</exception>
-        public async Task Send(string destinationAddress, TransportMessage transportMessage, ITransactionContext context)
+        protected override async Task SendOutgoingMessages(IEnumerable<OutgoingTransportMessage> outgoingMessages, ITransactionContext context)
         {
-            if (destinationAddress == null) throw new ArgumentNullException(nameof(destinationAddress));
-            if (transportMessage == null) throw new ArgumentNullException(nameof(transportMessage));
+            if (!(outgoingMessages?.Any() == true))
+                return;
+
             if (context == null) throw new ArgumentNullException(nameof(context));
 
             if (_queueSubscriptionStorage?.IsInitialized == false) // waiting for initialization to complete
@@ -61,49 +65,59 @@ namespace Rebus.Kafka
             }
 
             DeliveryResult<string, byte[]> result = null;
-            try
+            foreach (var outgoingMessage in outgoingMessages)
             {
-                var headers = new Confluent.Kafka.Headers();
-                foreach (var header in transportMessage.Headers)
+                try
                 {
-                    headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                    var headers = new Confluent.Kafka.Headers();
+                    foreach (var header in outgoingMessage.TransportMessage.Headers)
+                    {
+                        headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                    }
+                    var message = new Message<string, byte[]> { Value = outgoingMessage.TransportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
+                    result = await _producer.ProduceAsync(outgoingMessage.DestinationAddress, message);
+                    if (result.Status == PersistenceStatus.NotPersisted)
+                    {
+                        throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {message.ToReadableText()}");
+                    }
+#if DEBUG
+                    _log.Debug($"The following message was sent to the topic \"{outgoingMessage.DestinationAddress}\": {System.Text.Json.JsonSerializer.Serialize(message)}");
+#endif
                 }
-                var message = new Message<string, byte[]> { Value = transportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
-                result = await _producer.ProduceAsync(destinationAddress, message);
-                // ToDo: Обрабатывать через транзакцию result.Status
-            }
-            catch (Exception ex)
-            {
-                _log?.Error(ex,
-                    "Error producing to Kafka. Topic/partition: '{topic}/{partition}'. Message: {message}'.",
-                    destinationAddress,
-                    result?.Partition.ToString() ?? "N/A",
-                    result?.Value.ToString() ?? "N/A");
-                throw;
+                catch (Exception ex)
+                {
+                    _log?.Error(ex,
+                        "Error producing to Kafka. Topic/partition: '{topic}/{partition}'. Key: {key}; Value: {value}'.",
+                        outgoingMessage.DestinationAddress,
+                        result?.Partition.ToString() ?? "N/A",
+                        result?.Key ?? "N/A",
+                        result?.Value.ToString() ?? "N/A");
+                    throw;
+                }
             }
         }
 
         /// <inheritdoc />
-        public async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
+        public override async Task<TransportMessage> Receive(ITransactionContext context, CancellationToken cancellationToken)
         {
             if (Address == null)
                 throw new InvalidOperationException("This Kafka transport does not have an input queue - therefore, it is not possible to receive anything");
             try
             {
-                var receivedMesage = await _queueSubscriptionStorage.Receive(context, cancellationToken).ConfigureAwait(false);
-                context.OnDisposed(tc => _log.Debug($"context.OnDisposed : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}"));
-                context.OnCommitted(tc =>
+                TransportMessage receivedMessage = await _queueSubscriptionStorage.Receive(context, cancellationToken).ConfigureAwait(false);
+                context.OnAck(tc =>
                 {
-                    _log.Debug($"context.OnCommitted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}");
+                    _log.Debug($"context.OnAck : {receivedMessage.ToReadableText()}");
+                    _queueSubscriptionStorage.Ack(receivedMessage);
+                    return Task.CompletedTask; // Тут помечть сообщение обработанным и проверять не пора ли комитить самую старую порцию сообщений и комитить если пора _consumer.Commit...
+                });
+                context.OnNack(tc =>
+                {
+                    _log.Debug($"context.OnNack : {receivedMessage.ToReadableText()}");
+                    _queueSubscriptionStorage.Nack(receivedMessage);
                     return Task.CompletedTask;
                 });
-                context.OnCompleted(tc =>
-                {
-                    _log.Debug($"context.OnCompleted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}");
-                    return Task.CompletedTask;
-                });
-                context.OnAborted(tc => _log.Debug($"context.OnAborted : {Newtonsoft.Json.JsonConvert.SerializeObject(receivedMesage)}"));
-                return receivedMesage;
+                return receivedMessage;
             }
             catch (Exception exception)
             {
@@ -113,11 +127,8 @@ namespace Rebus.Kafka
             }
         }
 
-        /// <summary>Gets the input queue name for this transport</summary>
-        public string Address { get; }
-
         /// <inheritdoc />
-        public Task<string[]> GetSubscriberAddresses(string topic)
+        Task<IReadOnlyList<string>> ISubscriptionStorage.GetSubscriberAddresses(string topic)
         {
             return _queueSubscriptionStorage.GetSubscriberAddresses(topic);
         }
@@ -144,7 +155,7 @@ namespace Rebus.Kafka
         /// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
         public void Initialize()
         {
-            _log.Info("Initializing Kafka transport with queue {queueName}", Address);
+            _log.Info($"Initializing Kafka transport with queue \"{Address}\"");
             var builder = new ProducerBuilder<string, byte[]>(_producerConfig)
                 .SetKeySerializer(Serializers.Utf8)
                 .SetValueSerializer(Serializers.ByteArray)
@@ -191,16 +202,12 @@ namespace Rebus.Kafka
         {
             return _topicRegex.Replace(topic, "_");
         }
-        /// <summary>For repeat</summary>
+        /// <summary>For run repetitive background tasks</summary>
         readonly IAsyncTaskFactory _asyncTaskFactory;
         readonly ILog _log;
-
         private IProducer<string, byte[]> _producer;
         private readonly ProducerConfig _producerConfig;
-
         private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
-        readonly CancellationToken _cancellationToken;
-
         private readonly KafkaSubscriptionStorage _queueSubscriptionStorage;
 
         /// <summary>Creates new instance <see cref="KafkaTransport"/>. Performs a simplified
@@ -212,7 +219,7 @@ namespace Rebus.Kafka
         /// <param name="groupId">Id of group</param>
         /// <param name="cancellationToken"></param>
         public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
-            , string inputQueueName, string groupId = null, CancellationToken cancellationToken = default(CancellationToken))
+            , string inputQueueName, string groupId = null) : base(inputQueueName)
         {
             if (string.IsNullOrWhiteSpace(brokerList))
                 throw new NullReferenceException(nameof(brokerList));
@@ -231,19 +238,16 @@ namespace Rebus.Kafka
             _producerConfig.Set("request.required.acks", "-1");
             _producerConfig.Set("queue.buffering.max.ms", "5");
 
-            if (!string.IsNullOrWhiteSpace(inputQueueName))
+            if (!string.IsNullOrWhiteSpace(inputQueueName)) // else OneWayClient
             {
                 var maxNameLength = 249;
                 if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
                     throw new ArgumentException("Invalid characters or the length of the topic (file)", nameof(inputQueueName));
-                Address = inputQueueName;
-                _queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
-                    , inputQueueName, groupId, cancellationToken);
-            }
+                _queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, groupId);
+            } 
 
             _log = rebusLoggerFactory.GetLogger<KafkaTransport>();
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
-            _cancellationToken = cancellationToken;
         }
 
         /// <summary>Creates new instance <see cref="KafkaTransport"/>. Allows you to configure
@@ -264,8 +268,8 @@ namespace Rebus.Kafka
         ///     At a minimum, 'bootstrap.servers' and 'group.id' must be
         ///     specified.</param>
         /// <param name="cancellationToken"></param>
-        public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList, string inputQueueName
-            , ProducerConfig producerConfig, ConsumerConfig consumerConfig, CancellationToken cancellationToken = default(CancellationToken))
+        public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
+            , string inputQueueName, ProducerConfig producerConfig, ConsumerConfig consumerConfig) : base(inputQueueName)
         {
             if (string.IsNullOrWhiteSpace(brokerList))
                 throw new NullReferenceException(nameof(brokerList));
@@ -275,25 +279,25 @@ namespace Rebus.Kafka
 
             if (consumerConfig != null)
             {
+                if (string.IsNullOrWhiteSpace(inputQueueName))
+                    throw new ArgumentNullException(nameof(inputQueueName));
                 var maxNameLength = 249;
                 if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
                     throw new ArgumentException("Invalid characters or the length of the topic (file)", nameof(inputQueueName));
-                Address = inputQueueName;
                 if (consumerConfig is ConsumerAndBehaviorConfig consumerAndBehaviorConfig)
                 {
                     _queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
-                        , inputQueueName, consumerAndBehaviorConfig, cancellationToken);
+                        , inputQueueName, consumerAndBehaviorConfig);
                 }
                 else
                 {
                     _queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList
-                        , inputQueueName, consumerConfig, cancellationToken);
+                        , inputQueueName, consumerConfig);
                 }
             }
 
             _log = rebusLoggerFactory.GetLogger<KafkaTransport>();
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
-            _cancellationToken = cancellationToken;
         }
 
         /// <summary>Creates new instance <see cref="KafkaTransport"/>. Allows you to configure
@@ -314,9 +318,9 @@ namespace Rebus.Kafka
         /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
         /// </param>
         /// <param name="cancellationToken"></param>
-        public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList, string inputQueueName
-            , ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig, CancellationToken cancellationToken = default)
-            : this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, (ConsumerConfig)consumerAndBehaviorConfig, cancellationToken) { }
+        public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
+            , string inputQueueName, ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig)
+            : this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, (ConsumerConfig)consumerAndBehaviorConfig) { }
 
         /// <inheritdoc />
         public void Dispose()

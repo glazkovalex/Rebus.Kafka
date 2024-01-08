@@ -11,7 +11,7 @@ namespace Rebus.Kafka.Tests.ErrorHandling
     {
         public readonly ConcurrentQueue<TransportMessage> FailedMessages = new ConcurrentQueue<TransportMessage>();
 
-        public async Task HandlePoisonMessage(TransportMessage transportMessage, ITransactionContext transactionContext, Exception exception)
+        public async Task HandlePoisonMessage(TransportMessage transportMessage, ITransactionContext transactionContext, ExceptionInfo exception)
         {
             FailedMessages.Enqueue(transportMessage);
         }

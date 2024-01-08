@@ -1,32 +1,61 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Rebus.Bus;
+using Rebus.Exceptions;
 using Rebus.Handlers;
 using Rebus.Kafka.Tests.Messages;
+using Rebus.Retry.Simple;
 using Xunit.Abstractions;
 
 namespace Rebus.Kafka.Tests.ErrorHandling
 {
     /// <inheritdoc />
-    public class RetriesMessageHandler : IHandleMessages<RetriesMessage>
+    public class RetriesMessageHandler : IHandleMessages<RetriesMessage>, IHandleMessages<IFailed<RetriesMessage>>
     {
         /// <inheritdoc />
-        public Task Handle(RetriesMessage evnt)
+        public async Task Handle(RetriesMessage evnt)
         {
             ErrorHandlingTests.Counter.Add(evnt.MessageNumber);
-            _output.WriteLine($"RetriesMessageHandler received : \"{evnt.MessageNumber}\"");
-            if (ErrorHandlingTests.Counter.Count < 2)
+            _output.WriteLine($"RetriesMessageHandler received : \"{evnt.MessageNumber}\". Amount = {ErrorHandlingTests.Counter.Amount}");
+            if (evnt.MessageNumber == 2)
             {
-                throw new InvalidOperationException();
+                throw new InvalidOperationException("Checking for a message processing failure");
             }
-            return Task.CompletedTask;
+            else
+            {
+                await Task.Delay(100);
+            }
         }
 
-        private readonly ITestOutputHelper _output;
+        public async Task Handle(IFailed<RetriesMessage> failedMessage)
+        {
+            var deferCount = Convert.ToInt32(failedMessage.Headers.GetValueOrDefault(Rebus.Messages.Headers.DeferCount));
+            _output.WriteLine($"RetriesMessageHandler deferCount:{deferCount} processing IFailed<RetriesMessage> : \"{failedMessage.Message.MessageNumber}\"");
+            _output.WriteLine($"ErrorDescription: {failedMessage.ErrorDescription}");
+            _output.WriteLine($"Exceptions: {JsonSerializer.Serialize(failedMessage.Exceptions, new JsonSerializerOptions { WriteIndented = true })}");
+            ErrorHandlingTests.Counter.Add(failedMessage.Message.MessageNumber);
+            
+            const int maxDeferCount = 2;
+            if (deferCount >= maxDeferCount)
+            {
+                await _bus.Advanced.TransportMessage.Deadletter($"Failed after {deferCount} deferrals\n\n{failedMessage.ErrorDescription}");
+            }
+            else
+            {
+                await _bus.Advanced.TransportMessage.Defer(TimeSpan.FromSeconds(1));
+            }
+        }
+
+        readonly ITestOutputHelper _output;
+        IBus _bus;
 
         /// <summary>Creates new instance <see cref="RetriesMessageHandler"/>.</summary>
-        public RetriesMessageHandler(ITestOutputHelper output)
+        public RetriesMessageHandler(ITestOutputHelper output, IBus bus)
         {
             _output = output;
+            _bus = bus;
         }
     }
 }

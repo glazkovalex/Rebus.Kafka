@@ -58,7 +58,7 @@ namespace Scaleout.Producer
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
-				.Routing(r => r.TypeBased().Map<TestMessage>("scaleout.consumers"))
+				//.Routing(r => r.TypeBased().Map<TestMessage>("scaleout.consumers"))
 			);
 
 			using (container = builder.Build())

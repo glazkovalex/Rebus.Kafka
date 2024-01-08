@@ -5,7 +5,6 @@ using Rebus.Subscriptions;
 using Rebus.Threading;
 using Rebus.Transport;
 using System;
-using System.Threading;
 using Rebus.Kafka.Configs;
 
 namespace Rebus.Kafka
@@ -35,9 +34,8 @@ namespace Rebus.Kafka
 							$"You must supply a valid value for topicPrefix");
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					var cancellationToken = c.Get<CancellationToken>();
 					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory
-						, brokerList, inputQueueName, groupId, cancellationToken);
+						, brokerList, inputQueueName, groupId);
 				});
 
 			// Register implementation of the Transport as ITransport
@@ -79,9 +77,8 @@ namespace Rebus.Kafka
 							$"You must supply a valid value for topicPrefix");
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					var cancellationToken = c.Get<CancellationToken>();
 					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
-						, inputQueueName, producerConfig, consumerConfig, cancellationToken);
+						, inputQueueName, producerConfig, consumerConfig);
 				});
 
 			// Register implementation of the Transport as ITransport
@@ -123,9 +120,8 @@ namespace Rebus.Kafka
 							$"You must supply a valid value for topicPrefix");
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					var cancellationToken = c.Get<CancellationToken>();
 					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
-						, inputQueueName, producerConfig, consumerAndBehaviorConfig, cancellationToken);
+						, inputQueueName, producerConfig, consumerAndBehaviorConfig);
 				});
 
 			// Register implementation of the Transport as ITransport
@@ -150,9 +146,7 @@ namespace Rebus.Kafka
 				{
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					var cancellationToken = c.Get<CancellationToken>();
-					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory
-						, brokerList, null, null, cancellationToken);
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList, null, null);
 				});
 
 			// Register implementation of the Transport as ITransport
@@ -186,9 +180,7 @@ namespace Rebus.Kafka
 				{
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
 					var asyncTaskFactory = c.Get<IAsyncTaskFactory>();
-					var cancellationToken = c.Get<CancellationToken>();
-					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList
-						, null, producerConfig, null, cancellationToken);
+					return new KafkaTransport(rebusLoggerFactory, asyncTaskFactory, brokerList, null, producerConfig, null);
 				});
 
 			// Register implementation of the Transport as ITransport

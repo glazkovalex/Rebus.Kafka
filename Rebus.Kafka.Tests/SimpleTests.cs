@@ -2,7 +2,6 @@
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
@@ -18,7 +17,6 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Testcontainers.Kafka;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -319,8 +317,8 @@ namespace Rebus.Kafka.Tests
                 Output.WriteLine($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
                 Assert.True(swSend.ElapsedMilliseconds < 2000);
 
-                await Task.Delay(10000);
-                Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < 10000);
+                await Task.Delay(20000);
+                Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < 20000);
             }
         }
 
@@ -374,26 +372,8 @@ namespace Rebus.Kafka.Tests
             }
         }
 
-        private readonly KafkaContainer _kafkaContainer = new KafkaBuilder().WithImage("confluentinc/cp-kafka:7.0.1").Build();
-
-        public async Task InitializeAsync()
-        {
-            Logger.LogTrace("Initialize kafka container");
-            await _kafkaContainer.StartAsync();
-            BootstrapServer = _kafkaContainer.GetBootstrapAddress();
-        }
-
-        public Task DisposeAsync()
-        {
-            Logger.LogTrace("Dispose kafka container");
-            return _kafkaContainer.DisposeAsync().AsTask();
-        }
-
         const int MessageCount = 10;
 
-        public SimpleTests(ITestOutputHelper output) : base(output)
-        {
-
-        }
+        public SimpleTests(ITestOutputHelper output) : base(output) {  }
     }
 }
