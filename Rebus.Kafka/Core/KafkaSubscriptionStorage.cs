@@ -55,22 +55,7 @@ namespace Rebus.Kafka.Core
                     var headers = consumeResult.Message?.Headers.ToDictionary(k => k.Key,
                     v => System.Text.Encoding.UTF8.GetString(v.GetValueBytes())) ?? new Dictionary<string, string>();
                     TransportMessage transportMessage = new TransportMessage(headers, consumeResult.Message?.Value ?? new byte[0]);
-
-                    if (consumeResult.Offset % _behaviorConfig.CommitPeriod == 0)
-                    {
-                        // The Commit method sends a "commit offsets" request to the Kafka
-                        // cluster and synchronously waits for the response. This is very
-                        // slow compared to the rate at which the consumer is capable of
-                        // consuming messages. A high performance application will typically
-                        // commit offsets relatively infrequently and be designed handle
-                        // duplicate messages in the event of failure.
-                        _commitDispatcher.AppendMessageInQueue(transportMessage, consumeResult.TopicPartitionOffset); 
-                        _consumer.Commit(new[] { consumeResult.TopicPartitionOffset });
-                    }
-                    else
-                    {
-                        _commitDispatcher.AppendMessage(transportMessage, consumeResult.TopicPartitionOffset);
-                    }
+                    _commitDispatcher.AppendMessage(transportMessage, consumeResult.TopicPartitionOffset);
                     return Task.FromResult(transportMessage);
                 }
                 return Task.FromResult<TransportMessage>(null);
@@ -173,6 +158,8 @@ namespace Rebus.Kafka.Core
         /// <inheritdoc />
         public void Initialize()
         {
+            _commitDispatcher = new CommitDispatcher(_log, _behaviorConfig);
+
             // Note: If a key or value deserializer is not set (as is the case below), the 
             // deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
             // will be used automatically (where available). The default deserializer for string
@@ -187,7 +174,7 @@ namespace Rebus.Kafka.Core
                 .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssigned)
                 .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
                 .Build();
-
+                        
             _commitDispatcher.OnCanCommit(tpos => _consumer.Commit(tpos));
 
             var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
@@ -359,7 +346,6 @@ namespace Rebus.Kafka.Core
             _cancellationToken = cancellationToken;
 
             _subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
-            _commitDispatcher = new CommitDispatcher(_log);
         }
 
         internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
@@ -389,7 +375,6 @@ namespace Rebus.Kafka.Core
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
             _cancellationToken = cancellationToken;
             _subscriptions.TryAdd(inputQueueName, new[] { inputQueueName });
-            _commitDispatcher = new CommitDispatcher(_log);
         }
 
         internal KafkaSubscriptionStorage(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
@@ -404,7 +389,10 @@ namespace Rebus.Kafka.Core
         {
             try
             {
-                _consumer.Commit();
+                if(_commitDispatcher.TryGetOffsetsThatCanBeCommit(out var tpos))
+                {
+                    _consumer.Commit(tpos);
+                }
             }
             catch (Exception) { /* ignored */ }
             _consumer?.Close();

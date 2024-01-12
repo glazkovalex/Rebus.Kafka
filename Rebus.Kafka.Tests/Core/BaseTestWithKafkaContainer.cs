@@ -16,14 +16,14 @@ namespace Rebus.Kafka.Tests.Core
 
         public async Task InitializeAsync()
         {
-            Logger.LogTrace("Initialize kafka container");
+            Logger.LogInformation("Initialize kafka container");
             await _kafkaContainer.StartAsync();
             BootstrapServer = _kafkaContainer.GetBootstrapAddress();
         }
 
         public Task DisposeAsync()
         {
-            Logger.LogTrace("Dispose kafka container");
+            Logger.LogInformation("Dispose kafka container");
             return _kafkaContainer.DisposeAsync().AsTask();
         }
         protected ITestOutputHelper Output;

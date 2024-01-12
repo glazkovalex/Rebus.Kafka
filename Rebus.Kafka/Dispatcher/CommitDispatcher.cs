@@ -1,4 +1,5 @@
 ﻿using Confluent.Kafka;
+using Rebus.Kafka.Configs;
 using Rebus.Kafka.Core;
 using Rebus.Kafka.Extensions;
 using Rebus.Logging;
@@ -18,31 +19,16 @@ namespace Rebus.Kafka.Dispatcher
     /// </summary>
     internal class CommitDispatcher
     {
-        internal ConcurrentQueue<MessageBlock> _queue = new ConcurrentQueue<MessageBlock>();
-        internal MessageBlock _latestMessageInfos = new MessageBlock();
+        internal ConcurrentDictionary<string, ProcessedMessage> _messageInfos = new ConcurrentDictionary<string, ProcessedMessage>();
 
         internal Result AppendMessage(TransportMessage message, TopicPartitionOffset topicPartitionOffset)
         {
             string messageId = message.GetId();
-            if (_latestMessageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
+            if (_messageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
             {
-                _log.Debug($"\nCommitDispatcher.AppendMessage message: {messageId}.{DicpatcherStateToStrting()}");
-                return Result.Ok();
-            }
-            else
-            {
-                return Result.Fail($"Already exist {messageId} in {DicpatcherStateToStrting()}");
-            }
-        }
-
-        internal Result AppendMessageInQueue(TransportMessage message, TopicPartitionOffset topicPartitionOffset)
-        {
-            string messageId = message.GetId();
-            if (_latestMessageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
-            {
-                var messageInfos = Interlocked.Exchange(ref _latestMessageInfos, new MessageBlock());
-                _queue.Enqueue(messageInfos);
-                _log.Debug($"\nCommitDispatcher.AppendMessageInQueue message: {messageId}.{DicpatcherStateToStrting()}");
+#if DEBUG
+                _log.Debug($"\nCommitDispatcher.AppendMessage (Thread #{Thread.CurrentThread.ManagedThreadId}) message: {messageId}.{DicpatcherStateToStrting()}");
+#endif
                 return Result.Ok();
             }
             else
@@ -54,98 +40,99 @@ namespace Rebus.Kafka.Dispatcher
         internal Result Completing(TransportMessage message)
         {
             string messageId = message.GetId();
-            if (_latestMessageInfos.TryGetValue(messageId, out var oldProcessedMessage))
+            if (_messageInfos.TryGetValue(messageId, out var oldProcessedMessage))
             {
-                if (_latestMessageInfos.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
+                if (_messageInfos.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
                 {
+#if DEBUG
                     _log.Debug($"\nCommitDispatcher.Completing message: {messageId}.{DicpatcherStateToStrting()}");
+#endif
+                    if (_messageInfos.Count > _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
+                    {
+                        CanCommit(tpos);
+                    }
                     return Result.Ok();
                 }
             }
-            else
-            {
-                foreach (var block in _queue)
-                {
-                    if (block.TryGetValue(messageId, out oldProcessedMessage))
-                    {
-                        if (block.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
-                        {
-                            _log.Debug($"\nCommitDispatcher.Completing message: {messageId}.{DicpatcherStateToStrting()}");
-                            while (TryCommitLastBlock()) { }
-                            return Result.Ok();
-                        }
-                    }
-                }
-            }
-            return Result.Fail($"No such message: {message.ToReadableText()} in the existing:\n{string.Join("\n", _latestMessageInfos.Keys.Concat(_queue.SelectMany(b => b.Keys)))}");
-        }
-
-        private bool TryCommitLastBlock()
-        {
-            if (_queue.TryPeek(out var block))
-            {
-                if (block.All(m => m.Value.Status == MessageProcessingStatuses.Completed))
-                {
-                    if (_queue.TryDequeue(out var completedBlock))
-                    {
-                        var tpos = completedBlock.Values.Select(mi => mi.TopicPartitionOffset).ToList();
-                        _log.Debug($"\nCommitDispatcher.OnCanCommit messages:\n\t{string.Join(",\n\t", completedBlock.Select(mi => $"{mi.Key}; {mi.Value}"))}.{DicpatcherStateToStrting()}");
-                        CanCommit(tpos);
-                        return true;
-                    }
-                }
-            }
-            return false;
+            return Result.Fail($"No such message: {message.ToReadableText()} in the existing:\n{string.Join("\n", _messageInfos.Keys)}");
         }
 
         internal Result Reprocessing(TransportMessage message)
         {
             string messageId = message.GetId();
-            if (_latestMessageInfos.TryGetValue(messageId, out var oldProcessedMessage))
+            if (_messageInfos.TryGetValue(messageId, out var oldProcessedMessage))
             {
                 var newProcessedMessage = new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Reprocess, message);
-                if (_latestMessageInfos.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
+                if (_messageInfos.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
                 {
+#if DEBUG
                     _log.Debug($"\nCommitDispatcher.Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
+#endif                    
                     return Result.Ok();
-                }
-            }
-            else
-            {
-                foreach (var block in _queue)
-                {
-                    if (block.TryGetValue(messageId, out oldProcessedMessage))
-                    {
-                        var newProcessedMessage = new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Reprocess, message);
-                        if (block.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
-                        {
-                            _log.Debug($"\nCommitDispatcher.Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
-                            return Result.Ok();
-                        }
-                    }
                 }
             }
             return Result.Fail($"No such message: {message.ToReadableText()}.{DicpatcherStateToStrting()}");
         }
 
+
         internal bool TryConsumeMessageToRestarted(out TransportMessage reprocessMessage)
         {
-            if (_queue.TryPeek(out var block))
+            var reprocessMessageInfo = _messageInfos.OrderBy(mi => mi.Value.TopicPartitionOffset.Offset.Value)
+                .FirstOrDefault(mi => mi.Value.Status == MessageProcessingStatuses.Reprocess);
+            if (!reprocessMessageInfo.Equals(default(KeyValuePair<string, ProcessedMessage>)))
             {
-                var pair = block.FirstOrDefault(m => m.Value.Status == MessageProcessingStatuses.Reprocess);
-                if (!pair.Equals(default(KeyValuePair<string, ProcessedMessage>)))
+                _messageInfos.TryUpdate(reprocessMessageInfo.Key, new ProcessedMessage(reprocessMessageInfo.Value.TopicPartitionOffset, MessageProcessingStatuses.Processing), reprocessMessageInfo.Value);
                 {
-                    if (block.TryUpdate(pair.Key, new ProcessedMessage(pair.Value.TopicPartitionOffset, MessageProcessingStatuses.Processing ), pair.Value))
-                    {
-                        reprocessMessage = pair.Value.Message;
-                        _log.Debug($"\nCommitDispatcher.TryConsumeMessageToRestarted message: {pair.Key}.{DicpatcherStateToStrting()}");
-                        return true;
-                    }
+                    reprocessMessage = reprocessMessageInfo.Value.Message;
+#if DEBUG
+                    _log.Debug($"\nCommitDispatcher.TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
+#endif                        
+                    return true;
                 }
             }
-            //ToDo: Отслеживать задержки перезапуска
+            //ToDo: Раз в секунду запускать
             reprocessMessage = null;
             return false;
+        }
+
+        internal bool TryGetOffsetsThatCanBeCommit(out List<TopicPartitionOffset> tpos)
+        {
+            tpos = new List<TopicPartitionOffset>();
+            var groups = _messageInfos.GroupBy(mi => new { mi.Value.TopicPartitionOffset.Topic, mi.Value.TopicPartitionOffset.Partition.Value });
+            foreach (var group in groups)
+            {
+                TopicPartitionOffset result = null;
+                foreach (var mi in group.OrderBy(pm => pm.Value.TopicPartitionOffset.Offset.Value))
+                {
+                    if (mi.Value.Status == MessageProcessingStatuses.Completed)
+                    {
+                        _messageInfos.TryRemove(mi.Key, out _);
+                        result = mi.Value.TopicPartitionOffset;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                if (result != null)
+                {
+                    tpos.Add(result);
+                }
+            }
+            if (tpos.Count > 0)
+            {
+#if DEBUG
+                _log.Debug($"\nCommitDispatcher.TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
+#endif
+                return true;
+            }
+            else
+            {
+#if DEBUG
+                _log.Debug($"\nCommitDispatcher.TryCommitLastBlock there is nothing to commit.{DicpatcherStateToStrting()}");
+#endif
+                return false;
+            }
         }
 
         /// <summary>
@@ -174,25 +161,19 @@ namespace Rebus.Kafka.Dispatcher
         }
 
         readonly ILog _log;
+        readonly ConsumerBehaviorConfig _behaviorConfig;
 
-        internal CommitDispatcher(ILog log)
+        internal CommitDispatcher(ILog log, ConsumerBehaviorConfig behaviorConfig)
         {
             _log = log;
+            _behaviorConfig = behaviorConfig;
         }
 
         private string DicpatcherStateToStrting()
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine();
-            int i = 0;
-            foreach (var block in _queue)
-            {
-                sb.AppendLine($"Queue block# {(i == 0 ? $"{i} (oldest)" : i.ToString())} message infos:");
-                sb.AppendLine($"\t{string.Join("\n\t", block.Select(mi => $"{mi.Key}; {mi.Value}"))}");
-                i++;
-            }
-            sb.AppendLine("Latest message infos:");
-            var latestMessageInfos = _latestMessageInfos.Select(mi => $"{mi.Key}; {mi.Value}");
+            sb.AppendLine("Message infos:");
+            var latestMessageInfos = _messageInfos.Select(mi => $"{mi.Key}; {mi.Value}");
             sb.AppendLine($"\t{(latestMessageInfos.Any() ? string.Join("\n\t", latestMessageInfos) : "----")}");
             return sb.ToString();
         }

@@ -107,13 +107,17 @@ namespace Rebus.Kafka
                 TransportMessage receivedMessage = await _queueSubscriptionStorage.Receive(context, cancellationToken).ConfigureAwait(false);
                 context.OnAck(tc =>
                 {
+#if DEBUG
                     _log.Debug($"context.OnAck : {receivedMessage.ToReadableText()}");
+#endif
                     _queueSubscriptionStorage.Ack(receivedMessage);
                     return Task.CompletedTask; // Тут помечть сообщение обработанным и проверять не пора ли комитить самую старую порцию сообщений и комитить если пора _consumer.Commit...
                 });
                 context.OnNack(tc =>
                 {
+#if DEBUG
                     _log.Debug($"context.OnNack : {receivedMessage.ToReadableText()}");
+#endif
                     _queueSubscriptionStorage.Nack(receivedMessage);
                     return Task.CompletedTask;
                 });
@@ -217,7 +221,6 @@ namespace Rebus.Kafka
         /// <param name="brokerList">Initial list of brokers as a CSV list of broker host or host:port.</param>
         /// <param name="inputQueueName">name of input queue</param>
         /// <param name="groupId">Id of group</param>
-        /// <param name="cancellationToken"></param>
         public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
             , string inputQueueName, string groupId = null) : base(inputQueueName)
         {
@@ -267,7 +270,6 @@ namespace Rebus.Kafka
         ///     <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
         ///     At a minimum, 'bootstrap.servers' and 'group.id' must be
         ///     specified.</param>
-        /// <param name="cancellationToken"></param>
         public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
             , string inputQueueName, ProducerConfig producerConfig, ConsumerConfig consumerConfig) : base(inputQueueName)
         {
@@ -317,7 +319,6 @@ namespace Rebus.Kafka
         /// (refer to: <see cref="T:Confluent.Kafka.ConfigPropertyNames" />).
         /// At a minimum, 'bootstrap.servers' and 'group.id' must be specified.
         /// </param>
-        /// <param name="cancellationToken"></param>
         public KafkaTransport(IRebusLoggerFactory rebusLoggerFactory, IAsyncTaskFactory asyncTaskFactory, string brokerList
             , string inputQueueName, ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig)
             : this(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, producerConfig, (ConsumerConfig)consumerAndBehaviorConfig) { }
