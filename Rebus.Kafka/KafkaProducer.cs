@@ -10,6 +10,7 @@ namespace Rebus.Kafka
 {
     /// <summary lang="en-US">Example message producer</summary>
     /// <summary lang="ru-RU">Пример поставщика сообщений</summary>
+    [Obsolete]
     public class KafkaProducer : IDisposable
     {
         private readonly ILogger<KafkaProducer> _logger;

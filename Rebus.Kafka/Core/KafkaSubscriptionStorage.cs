@@ -40,7 +40,7 @@ namespace Rebus.Kafka.Core
                     }
                     catch (OperationCanceledException e)
                     {
-                        _log?.Info($"Consume warning: {e.Message}");
+                        _log?.Warn($"Consume warning: {e.Message}");
                         resume = false;
                         consumeResult = null;
                     }
@@ -197,6 +197,7 @@ namespace Rebus.Kafka.Core
         /// Confirmation of the message
         /// </summary>
         /// <param name="message"></param>
+        /// <exception cref="RebusApplicationException">In case of a commit error</exception>
         internal void Ack(TransportMessage message)
         {
             Result result = _commitDispatcher.Completing(message);
@@ -208,6 +209,7 @@ namespace Rebus.Kafka.Core
         /// Not confirmation of the message for reprocessing
         /// </summary>
         /// <param name="message"></param>
+        /// <exception cref="RebusApplicationException">In case of a reprocessing planning error</exception>
         internal void Nack(TransportMessage message)
         {
             Result result = _commitDispatcher.Reprocessing(message);
