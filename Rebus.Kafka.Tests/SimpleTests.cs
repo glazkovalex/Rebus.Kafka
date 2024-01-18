@@ -117,7 +117,7 @@ namespace Rebus.Kafka.Tests
             var producerConfig = new ProducerConfig();
             producerConfig.BootstrapServers = BootstrapServer;
 
-            var consumerConfig = new ConsumerConfig();
+            var consumerConfig = new ConsumerAndBehaviorConfig();
             consumerConfig.BootstrapServers = BootstrapServer;
             consumerConfig.GroupId = "sample-consumer";
             consumerConfig.AutoOffsetReset = AutoOffsetReset.Earliest;
@@ -150,12 +150,15 @@ namespace Rebus.Kafka.Tests
 
                 using (var producer = new ProducerBuilder<string, string>(producerConfig).Build())
                 {
-                    _ = await producer.ProduceAsync(topic, message)
-                        .ConfigureAwait(false);
+                    _ = await producer.ProduceAsync(topic, message);
                 }
 
                 result = consumer.Consume(TimeSpan.FromSeconds(15));
                 Logger.LogTrace($"ConsumerReturnsProducerMessage received: {result.Message.Value}");
+                if (result.Offset % consumerConfig.BehaviorConfig.CommitPeriod == 0)
+                {
+                    consumer.Commit(result);
+                }
             }
 
             // Then
@@ -228,7 +231,7 @@ namespace Rebus.Kafka.Tests
                             return bus.Publish(new SecondMessage { MessageNumber = i });
                         })
                     ).ToArray();
-                
+
                 Task.WaitAll(messages);
                 await Task.Delay(10000);
 
@@ -328,22 +331,32 @@ namespace Rebus.Kafka.Tests
             string topic = "Performance";
             int perfomanceCount = 10000;
             CancellationTokenSource cts = new CancellationTokenSource();
-            var producerLogger = new TestLogger<KafkaProducer>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaProducer>());
-            using (var producer = new KafkaProducer(BootstrapServer, producerLogger))
+            var producerLogger = new TestLogger<KafkaProducer<Null, string>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaProducer<Null, string>>());
+            using (var producer = new KafkaProducer<Null, string>(BootstrapServer, producerLogger))
             {
-                var consumerLogger = new TestLogger<KafkaConsumer>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaConsumer>());
+                var consumerLogger = new TestLogger<KafkaConsumer<Null, string>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaConsumer<Null, string>>());
                 Stopwatch swHandle = null;
-
-                KafkaConsumer consumer = new KafkaConsumer(BootstrapServer, "temp", consumerLogger);
+                var consumerConfig = new ConsumerAndBehaviorConfig
+                {
+                    //BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 5 },
+                    BootstrapServers = BootstrapServer,
+                    AllowAutoCreateTopics = true,
+                    GroupId = "temp",
+                    AutoOffsetReset = AutoOffsetReset.Earliest,
+                };
+                using (KafkaConsumer<Null, string> consumer = new KafkaConsumer<Null, string>(consumerConfig, consumerLogger))
                 {
                     int messageCount = 0;
                     var sendAmount = 0;
                     var obs = consumer.Consume(new[] { topic });
-                    obs.Subscribe(transportMessage =>
+                    obs.Subscribe(consumeResult =>
                     {
                         swHandle ??= Stopwatch.StartNew();
-
-                        var message = JsonSerializer.Deserialize<Message>(transportMessage.Value);
+                        if (consumeResult.Offset %  consumerConfig.BehaviorConfig.CommitPeriod == 0)
+                        {
+                            consumer.Commit(consumeResult.TopicPartitionOffset);
+                        }
+                        var message = JsonSerializer.Deserialize<Message>(consumeResult.Message.Value);
                         sendAmount -= message.MessageNumber;
                         messageCount++;
                         if (messageCount == perfomanceCount && sendAmount == 0)
@@ -368,12 +381,13 @@ namespace Rebus.Kafka.Tests
                     await Task.Delay(10000);
                     cts.Cancel();
                     Assert.True(swHandle?.IsRunning == false && swHandle?.ElapsedMilliseconds < 10000);
+                    await Task.Delay(1000);
                 }
             }
         }
 
         const int MessageCount = 10;
 
-        public SimpleTests(ITestOutputHelper output) : base(output) {  }
+        public SimpleTests(ITestOutputHelper output) : base(output) { }
     }
 }

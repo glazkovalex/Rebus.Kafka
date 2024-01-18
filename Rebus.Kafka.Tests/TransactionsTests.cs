@@ -1,5 +1,4 @@
 ﻿using Autofac;
-using Microsoft.Extensions.Logging;
 using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
@@ -8,7 +7,6 @@ using Rebus.Kafka.Tests.Messages;
 using Rebus.Transport;
 using System.Linq;
 using System.Threading.Tasks;
-using Testcontainers.Kafka;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -37,10 +35,7 @@ namespace Rebus.Kafka.Tests
                 using (var scope = new RebusTransactionScope())
                 {
                     var messages = Enumerable.Range(1, MessageCount)
-                    .Select(i =>
-                    {
-                        return bus.Publish(new Message { MessageNumber = i });
-                    }).ToArray();
+                        .Select(i => bus.Publish(new Message { MessageNumber = i })).ToArray();
                     Task.WaitAll(messages);
                     await Task.Delay(10000);
 
@@ -72,7 +67,7 @@ namespace Rebus.Kafka.Tests
                 await Task.Delay(10000);
                 Assert.Equal(sendAmount, MessageHandler.Counter.Amount);
             }
-        }        
+        }
 
         [Fact]
         public async Task DelayedCompletionOfTransaction()

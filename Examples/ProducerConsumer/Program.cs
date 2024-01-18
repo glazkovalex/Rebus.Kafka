@@ -23,21 +23,25 @@ namespace ProducerConsumer
             };
             var globalScope = ConfigureServices();
             var loggerFactory = globalScope.ServiceProvider.GetRequiredService<ILoggerFactory>();
-            ILogger<KafkaProducer> loggerProducer = loggerFactory.CreateLogger<KafkaProducer>();
-            var loggerConsumer = loggerFactory.CreateLogger<KafkaConsumer>();
+            ILogger<KafkaProducer<Null, string>> loggerProducer = loggerFactory.CreateLogger<KafkaProducer<Null, string>>();
+            var loggerConsumer = loggerFactory.CreateLogger<KafkaConsumer<Null, string>>();
 
-            using (var dependentKafkaProducer = new KafkaProducer(_kafkaEndpoint, loggerProducer))
-            using (var producer = new KafkaProducer(dependentKafkaProducer)) // for test dependentKafkaProducer 
-            using (KafkaConsumer consumer = new KafkaConsumer(_kafkaEndpoint, loggerConsumer)
-                , consumer2 = new KafkaConsumer(_kafkaEndpoint, loggerConsumer))
+            using (var dependentKafkaProducer = new KafkaProducer<Null, string>(_kafkaEndpoint, loggerProducer))
+            using (var producer = new KafkaProducer<Null, string>(dependentKafkaProducer)) // for test dependentKafkaProducer 
+            using (KafkaConsumer<Null, string> consumer = new KafkaConsumer<Null, string>(_kafkaEndpoint, loggerConsumer)
+                , consumer2 = new KafkaConsumer<Null, string>(_kafkaEndpoint, loggerConsumer))
             {
                 consumer.Consume(new[] { bTopicNameResp })
-                    .Subscribe(message =>
+                    .Subscribe(result =>
                     {
-                        Console.WriteLine($"Boy name {message.Value} is recommended. (test-header:{(message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})");
+                        Console.WriteLine($"Boy name {result.Message.Value} is recommended. (test-header:{(result.Message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})");
+                        consumer.Commit(result.TopicPartitionOffset);
                     }, cts.Token);
                 consumer2.Consume(new[] { gTopicNameResp })
-                    .Subscribe(message => Console.WriteLine($"Girl name {message.Value} is recommended. (test-header:{(message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})"), cts.Token);
+                    .Subscribe(result => {
+                        Console.WriteLine($"Girl name {result.Message.Value} is recommended. (test-header:{(result.Message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})");
+                        consumer2.Commit(result.TopicPartitionOffset);
+                    }, cts.Token);
 
                 string userInput;
                 var rnd = new Random();
@@ -45,14 +49,17 @@ namespace ProducerConsumer
                 {
                     Console.WriteLine(userHelpMsg);
                     userInput = Console.ReadLine();
-                    var testHeader = new Headers {{"test-header", new byte[] {134}}};
                     switch (userInput)
                     {
                         case "b":
                             var nameCount = 1000;
 
                             Task[] jobs = Enumerable.Range(0, nameCount)
-                                .Select(i => new Message<Null, string> { Value = $"{i:D4} {_boyNames[rnd.Next(0, 5)]}", Headers = testHeader })
+                                .Select(i => new Message<Null, string>
+                                {
+                                    Value = $"{i:D4} {_boyNames[rnd.Next(0, 5)]}",
+                                    Headers = new Headers { { "test-header", new byte[] { (byte)rnd.Next(0, 0xFF) } } }
+                                })
                                 .Select(m => producer.ProduceAsync(bTopicNameResp, m))
                                 .ToArray();
                             Stopwatch sw = Stopwatch.StartNew();
@@ -60,10 +67,15 @@ namespace ProducerConsumer
                             Console.WriteLine($"Sending {nameCount} за {sw.ElapsedMilliseconds / 1000:N3}с");
                             break;
                         case "g":
-                            producer.ProduceAsync(gTopicNameResp, new Message<Null, string> { Value = _girlNames[rnd.Next(0, 5)], Headers = testHeader }
-                                , cts.Token).GetAwaiter().GetResult();
+                            producer.ProduceAsync(gTopicNameResp, new Message<Null, string>
+                            {
+                                Value = _girlNames[rnd.Next(0, 5)],
+                                Headers = new Headers { { "test-header", new byte[] { (byte)rnd.Next(0, 0xFF) } } }
+                            }, cts.Token).GetAwaiter().GetResult();
                             break;
                         case "q":
+                            cts.Cancel();
+                            Thread.Sleep(1000);
                             break;
                         default:
                             Console.WriteLine($"Unknown command.");

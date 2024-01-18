@@ -36,7 +36,7 @@ if (!Library.IsLoaded)
 - Due to the features of Apache Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario will work very slowly. I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast.
 
 ### Log of important changes:
-#### V 3.0.0 (08.01.2024)
+#### V 3.0.1 (12.01.2024)
 1. Refactoring for Rebus version 8 with the corresponding API change;
 2. Implemented RetryStrategy - [automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling). Confirmations of receipt of messages are now sent not after they are received, but only after successful processing of messages or sending them to the error topic; 
 3. Add ["transaction"](https://github.com/rebus-org/Rebus/wiki/Transactions) support. More precisely, not transactions, because Apache Kafka does not support transactions, but delayed sending of all transaction messages before calling [await scope.Complete Async()](https://github.com/glazkovalex/Rebus.Kafka/blob/bb7775d2b395fac10d2840517649722e279115e0/Rebus.Kafka.Tests/TransactionsTests.cs#L69) or canceling the sending of all "sent" messages at the end of the transaction block without calling await scope.Complete Async(). This convenience slows down the maximum performance of sending all messages by half, even those messages that are sent without transactions.
@@ -58,6 +58,7 @@ if (!Library.IsLoaded)
 	However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
 
 ### ToDo:
+- Schema Registry support in Kafka: Avro, JSON and Protobuf
 - In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
 
 ---

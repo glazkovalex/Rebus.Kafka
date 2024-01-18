@@ -4,7 +4,6 @@ using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
 using Rebus.Kafka;
-using Rebus.Routing.TypeBased;
 using Scaleout.Messages;
 using System;
 using System.Diagnostics;
@@ -13,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace Scaleout.Producer
 {
-	class Program
+    class Program
 	{
 		static void Main(string[] args)
 		{
@@ -58,8 +57,10 @@ namespace Scaleout.Producer
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
-				//.Routing(r => r.TypeBased().Map<TestMessage>("scaleout.consumers"))
-			);
+                .Options(o => {
+                    o.UseNamespaceAndTypeTopicNames();
+                })
+            );
 
 			using (container = builder.Build())
 			using (IBus bus = container.Resolve<IBus>())

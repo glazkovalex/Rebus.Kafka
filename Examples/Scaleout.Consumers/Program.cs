@@ -8,7 +8,7 @@ using System;
 
 namespace Scaleout.Consumers
 {
-	public class Program
+    public class Program
 	{
 		static void Main(string[] args)
 		{
@@ -19,7 +19,10 @@ namespace Scaleout.Consumers
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint
 					, "scaleout.consumers", "commonGroupForScaleout"))
-				.Options(o => o.SetMaxParallelism(2))
+				.Options(o => {
+					o.SetMaxParallelism(2);
+                    o.UseNamespaceAndTypeTopicNames();
+                })
 			);
 
 			using (container = builder.Build())
