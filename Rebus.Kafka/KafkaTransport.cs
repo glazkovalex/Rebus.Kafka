@@ -16,6 +16,7 @@ using Rebus.Kafka.Configs;
 using System.Collections.Generic;
 using Rebus.Kafka.Extensions;
 using System.Linq;
+using Rebus.Sagas.Idempotent;
 
 namespace Rebus.Kafka
 {
@@ -64,9 +65,9 @@ namespace Rebus.Kafka
                     }
             }
 
-            DeliveryResult<string, byte[]> result = null;
-            foreach (var outgoingMessage in outgoingMessages)
+            Parallel.ForEach(outgoingMessages, async (outgoingMessage) =>
             {
+                DeliveryResult<string, byte[]> result = null;
                 try
                 {
                     var headers = new Confluent.Kafka.Headers();
@@ -94,7 +95,7 @@ namespace Rebus.Kafka
                         result?.Value.ToString() ?? "N/A");
                     throw;
                 }
-            }
+            });
         }
 
         /// <inheritdoc />
