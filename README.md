@@ -30,7 +30,7 @@ See [examples](https://github.com/glazkovalex/Rebus.Kafka/tree/master/Examples) 
 * Additional Apache Kafka transport. The tests use an [confluentinc/cp-kafka](https://hub.docker.com/r/confluentinc/cp-kafka) container.
 * [Routing](https://github.com/rebus-org/Rebus/wiki/Routing)
 * [Pub sub messaging](https://github.com/rebus-org/Rebus/wiki/Pub-sub-messaging)
-* [Process managers (sagas)](https://github.com/rebus-org/RebusSamples/blob/master/Sagas/README.md)
+* [Process managers (sagas)](https://github.com/rebus-org/RebusSamples/blob/master/Sagas/README.md). See [example](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L53).
 * [Workers and parallelism](https://github.com/rebus-org/Rebus/wiki/Workers-and-parallelism)
 * [Automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling)
 * ["Transaction"](https://github.com/rebus-org/Rebus/wiki/Transactions) 
@@ -41,9 +41,9 @@ Many others are probably supported too, but I haven't checked.
 ### Additional features
 
 * When using the Rebus.ServiceProvider package, in order to avoid deadlocking, events should only be subscribed synchronously `bus.Subscribe<TestMessage>().Wait()`!
-* The [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default. However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
+* At the request of the transport users, the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default. However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
 * The [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) has a new overload with the [ConsumerAndBehaviorConfig](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka/Configs/ConsumerAndBehaviorConfig.cs) parameter instead of ConsumerConfig. This new configuration type contains transport behavior settings. So far, it has a single [CommitPeriod](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka/Configs/ConsumerBehaviorConfig.cs) parameter that defines the period after which the commit offset will be set in Apache Kafka. [Here is an example of using it ](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka.Tests/SimpleTests.cs#L69)
-* `UseAttributeOrTypeFullNameForTopicNames` simplifies naming the topic of events by Name from TopicAttribute(<TopicName>) or to "---Topic---.<Spacename>.<TypeName>".
+* [UseAttributeOrTypeFullNameForTopicNames](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L58) simplifies naming the topic of events by Name from [TopicAttribute({TopicName})](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Messages/KickoffSagaMessages.cs#L5) or to "---Topic---.{Spacename}.{TypeName}".
  
 ### Note: 
 - So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the appropriate version of the package "[librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist)". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use [Rebus.Kafka](https://github.com/glazkovalex/Rebus.Kafka) for the first time as follows:
