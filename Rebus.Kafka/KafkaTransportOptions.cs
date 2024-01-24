@@ -193,5 +193,5 @@ namespace Rebus.Kafka
 			
 			OneWayClientBackdoor.ConfigureOneWayClient(configurer);
 		}
-	}
+    }
 }

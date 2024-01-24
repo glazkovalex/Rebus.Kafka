@@ -18,7 +18,6 @@ namespace Scaleout.Producer
 		{
 			var producerConfig = new ProducerConfig
 			{
-				//BootstrapServers = , //will be set from the general parameter
 				ApiVersionRequest = true,
 				QueueBufferingMaxKbytes = 10240,
 #if DEBUG
@@ -31,7 +30,6 @@ namespace Scaleout.Producer
 
 			var consumerConfig = new ConsumerConfig
 			{
-				//BootstrapServers = , //will be set from the general parameter
 				ApiVersionRequest = true,
 				//GroupId = // will be set random
 				EnableAutoCommit = false,
@@ -58,7 +56,7 @@ namespace Scaleout.Producer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
 				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
                 .Options(o => {
-                    o.UseNamespaceAndTypeTopicNames();
+                    o.UseAttributeOrTypeFullNameForTopicNames();
                 })
             );
 

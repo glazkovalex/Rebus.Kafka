@@ -24,7 +24,7 @@ namespace RetryStrategy
                         counter++;
                         throw new InvalidOperationException($"Test ErrorHandling. Counter = {counter}");
                     }
-                    amount = amount + message.MessageNumber;
+                    Interlocked.Add(ref amount, message.MessageNumber);
                     WriteBlueLine($"Received : \"{message.MessageNumber}\"");
                     if (message.MessageNumber == MessageCount)
                         WriteBlueLine($"Received {MessageCount} messages for {sw.ElapsedMilliseconds / 1000f:N3}s");

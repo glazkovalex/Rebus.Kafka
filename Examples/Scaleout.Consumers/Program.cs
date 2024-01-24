@@ -17,11 +17,10 @@ namespace Scaleout.Consumers
 			builder.RegisterType<TestMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(TestMessage)));
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
-				.Transport(t => t.UseKafka(_kafkaEndpoint
-					, "scaleout.consumers", "commonGroupForScaleout"))
+				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.consumers", "commonGroupForScaleout"))
 				.Options(o => {
 					o.SetMaxParallelism(2);
-                    o.UseNamespaceAndTypeTopicNames();
+                    o.UseAttributeOrTypeFullNameForTopicNames();
                 })
 			);
 

@@ -27,7 +27,7 @@ namespace Rebus.Kafka.Dispatcher
             if (_messageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
             {
 #if DEBUG
-                _log.Debug($"\nCommitDispatcher.AppendMessage (Thread #{Thread.CurrentThread.ManagedThreadId}) message: {messageId}.{DicpatcherStateToStrting()}");
+                _log.Debug($"AppendMessage (Thread #{Thread.CurrentThread.ManagedThreadId}) message: {messageId}.{DicpatcherStateToStrting()}");
 #endif
                 return Result.Ok();
             }
@@ -45,11 +45,19 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"\nCommitDispatcher.Completing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug($"Completing message: {messageId}.{DicpatcherStateToStrting()}");
 #endif
-                    if (_messageInfos.Count > _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
+                    if (_messageInfos.Count >= _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
                     {
-                        CanCommit(tpos);
+                        if (CanCommit(tpos).Failure)
+                        {
+                            var result = CanCommit(tpos);
+                            if (result.Failure)
+                            {
+                                _log.Warn(result.Reason);
+                                // ToDo: Return it back to try it next time. 
+                            }
+                        }
                     }
                     return Result.Ok();
                 }
@@ -66,7 +74,7 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"\nCommitDispatcher.Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug($"Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
 #endif                    
                     return Result.Ok();
                 }
@@ -74,63 +82,67 @@ namespace Rebus.Kafka.Dispatcher
             return Result.Fail($"No such message: {message.ToReadableText()}.{DicpatcherStateToStrting()}");
         }
 
-
         internal bool TryConsumeMessageToRestarted(out TransportMessage reprocessMessage)
         {
-            var reprocessMessageInfo = _messageInfos.OrderBy(mi => mi.Value.TopicPartitionOffset.Offset.Value)
-                .FirstOrDefault(mi => mi.Value.Status == MessageProcessingStatuses.Reprocess);
-            if (!reprocessMessageInfo.Equals(default(KeyValuePair<string, ProcessedMessage>)))
+            lock (_tryConsumeMessageToRestartedLocker)
             {
-                _messageInfos.TryUpdate(reprocessMessageInfo.Key, new ProcessedMessage(reprocessMessageInfo.Value.TopicPartitionOffset, MessageProcessingStatuses.Processing), reprocessMessageInfo.Value);
+                var reprocessMessageInfo = _messageInfos.OrderBy(mi => mi.Value.TopicPartitionOffset.Offset.Value)
+                .FirstOrDefault(mi => mi.Value.Status == MessageProcessingStatuses.Reprocess);
+                if (!reprocessMessageInfo.Equals(default(KeyValuePair<string, ProcessedMessage>)))
                 {
-                    reprocessMessage = reprocessMessageInfo.Value.Message;
+                    _messageInfos.TryUpdate(reprocessMessageInfo.Key, new ProcessedMessage(reprocessMessageInfo.Value.TopicPartitionOffset, MessageProcessingStatuses.Processing), reprocessMessageInfo.Value);
+                    {
+                        reprocessMessage = reprocessMessageInfo.Value.Message;
 #if DEBUG
-                    _log.Debug($"\nCommitDispatcher.TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
-#endif                        
-                    return true;
+                        _log.Debug($"TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
+#endif
+                        return true;
+                    }
                 }
+                reprocessMessage = null;
+                return false;
             }
-            //ToDo: Раз в секунду запускать
-            reprocessMessage = null;
-            return false;
         }
 
         internal bool TryGetOffsetsThatCanBeCommit(out List<TopicPartitionOffset> tpos)
         {
             tpos = new List<TopicPartitionOffset>();
-            var groups = _messageInfos.GroupBy(mi => new { mi.Value.TopicPartitionOffset.Topic, mi.Value.TopicPartitionOffset.Partition.Value });
-            foreach (var group in groups)
+            lock (_tryGetOffsetsThatCanBeCommitLocker)
             {
-                TopicPartitionOffset result = null;
-                foreach (var mi in group.OrderBy(pm => pm.Value.TopicPartitionOffset.Offset.Value))
+                var groups = _messageInfos.GroupBy(mi => new { mi.Value.TopicPartitionOffset.Topic, mi.Value.TopicPartitionOffset.Partition.Value });
+                foreach (var group in groups)
                 {
-                    if (mi.Value.Status == MessageProcessingStatuses.Completed)
+                    TopicPartitionOffset result = null;
+                    foreach (var mi in group.OrderBy(pm => pm.Value.TopicPartitionOffset.Offset.Value))
                     {
-                        _messageInfos.TryRemove(mi.Key, out _);
-                        result = mi.Value.TopicPartitionOffset;
+                        if (mi.Value.Status == MessageProcessingStatuses.Completed)
+                        {
+                            _messageInfos.TryRemove(mi.Key, out _);
+                            result = mi.Value.TopicPartitionOffset;
+                        }
+                        else
+                        {
+                            break;
+                        }
                     }
-                    else
+                    if (result != null)
                     {
-                        break;
+                        tpos.Add(result);
                     }
-                }
-                if (result != null)
-                {
-                    tpos.Add(result);
                 }
             }
             if (tpos.Count > 0)
             {
 #if DEBUG
-                _log.Debug($"\nCommitDispatcher.TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
+                _log.Debug($"TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
 #endif
                 return true;
             }
             else
             {
-#if DEBUG
-                _log.Debug($"\nCommitDispatcher.TryCommitLastBlock there is nothing to commit.{DicpatcherStateToStrting()}");
-#endif
+                //#if DEBUG
+                //                _log.Debug($"CommitDispatcher.TryCommitLastBlock there is nothing to commit.{DicpatcherStateToStrting()}");
+                //#endif
                 return false;
             }
         }
@@ -139,40 +151,47 @@ namespace Rebus.Kafka.Dispatcher
         /// The event occurs when the most senior message block has been successfully processed
         /// </summary>
         /// <param name="commitAction"></param>
-        internal void OnCanCommit(Action<IReadOnlyList<TopicPartitionOffset>> commitAction)
+        internal void OnCanCommit(Func<IReadOnlyList<TopicPartitionOffset>, Result> commitAction)
         {
             _onCanCommit += commitAction;
         }
-        event Action<IReadOnlyList<TopicPartitionOffset>> _onCanCommit;
+        event Func<IReadOnlyList<TopicPartitionOffset>, Result> _onCanCommit;
 
-        void CanCommit(IReadOnlyList<TopicPartitionOffset> topicPartitionOffset)
+        Result CanCommit(IReadOnlyList<TopicPartitionOffset> topicPartitionOffset)
         {
-            if (_onCanCommit == null) return;
+            if (_onCanCommit == null) 
+                return Result.Ok();
 
             var delegates = _onCanCommit.GetInvocationList();
-
+            Result result;
             for (var index = 0; index < delegates.Length; index++)
             {
                 // they're always of this type, so no need to check the type here
-                var callback = (Action<IReadOnlyList<TopicPartitionOffset>>)delegates[index];
-
-                callback(topicPartitionOffset);
+                var callback = (Func<IReadOnlyList<TopicPartitionOffset>, Result>)delegates[index];
+                result = callback(topicPartitionOffset);
+                if (result.Failure)
+                {
+                    return result;
+                }
             }
+            return Result.Ok();
         }
 
         readonly ILog _log;
         readonly ConsumerBehaviorConfig _behaviorConfig;
+        object _tryGetOffsetsThatCanBeCommitLocker = new object();
+        object _tryConsumeMessageToRestartedLocker = new object();
 
-        internal CommitDispatcher(ILog log, ConsumerBehaviorConfig behaviorConfig)
+        internal CommitDispatcher(IRebusLoggerFactory rebusLoggerFactory, ConsumerBehaviorConfig behaviorConfig)
         {
-            _log = log;
+            _log = rebusLoggerFactory.GetLogger<CommitDispatcher>();
             _behaviorConfig = behaviorConfig;
         }
 
         private string DicpatcherStateToStrting()
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendLine("Message infos:");
+            sb.AppendLine("\nMessage infos:");
             var latestMessageInfos = _messageInfos.Select(mi => $"{mi.Key}; {mi.Value}");
             sb.AppendLine($"\t{(latestMessageInfos.Any() ? string.Join("\n\t", latestMessageInfos) : "----")}");
             return sb.ToString();

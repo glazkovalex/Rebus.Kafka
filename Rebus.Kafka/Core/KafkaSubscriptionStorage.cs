@@ -35,7 +35,7 @@ namespace Rebus.Kafka.Core
                 {
                     try
                     {
-                        consumeResult = _consumer.Consume(cancellationToken);
+                        consumeResult = _consumer.Consume(cancellationToken); //ToDo: Redo via cyclic selections via timeout. While checking if any messages need to be restarted!
                         resume = consumeResult.IsPartitionEOF;
                     }
                     catch (OperationCanceledException e)
@@ -90,11 +90,11 @@ namespace Rebus.Kafka.Core
             var toUnregister = _subscriptions.SelectMany(a => a.Value).ToArray();
             _subscriptions.TryRemove(topic, out _);
             var topics = _subscriptions.SelectMany(a => a.Value);
-            try
-            {
-                _consumer.Commit();
-            }
-            catch (Exception) { /* ignored */ }
+            //try
+            //{
+            //    _consumer.Commit();
+            //}
+            //catch (Exception) { /* ignored */ }
 
             var tcs = new TaskCompletionSource<bool>();
             //CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
@@ -106,7 +106,50 @@ namespace Rebus.Kafka.Core
             return tcs.Task;
         }
 
-        internal void CreateQueues(params string[] topics)
+        /// <inheritdoc />
+        public bool IsCentralized { get; } = true;
+
+        /// <inheritdoc />
+        public void Initialize()
+        {
+            _commitDispatcher = new CommitDispatcher(_rebusLoggerFactory, _behaviorConfig);
+
+            // Note: If a key or value deserializer is not set (as is the case below), the 
+            // deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
+            // will be used automatically (where available). The default deserializer for string
+            // is UTF8. The default deserializer for Ignore returns null for all input data
+            // (including non-null data).
+            _consumer = new ConsumerBuilder<string, byte[]>(_config)
+                .SetKeyDeserializer(Deserializers.Utf8)
+                .SetValueDeserializer(Deserializers.ByteArray)
+                .SetLogHandler(ConsumerOnLogHandler)
+                .SetErrorHandler(ConsumerOnErrorHandler)
+                .SetStatisticsHandler(ConsumerOnStatisticsHandler)
+                .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssignedHandler)
+                .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevokedHandler)
+                .SetPartitionsLostHandler(ConsumerOnPartitionsLostHandler)
+                .SetOffsetsCommittedHandler(ConsumerOnOffsetsCommittedHandler)
+                .Build();
+
+            _commitDispatcher.OnCanCommit(tpos => Commit(tpos));
+
+            var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
+            var tcs = new TaskCompletionSource<bool>();
+            _waitAssigned.TryAdd(topics, new KeyValuePair<string, TaskCompletionSource<bool>>(topics.First(), tcs));
+            ConsumerSubscribe(topics);
+            _initializationTask = tcs.Task;
+        }
+
+        void ConsumerSubscribe(IEnumerable<string> topics)
+        {
+            if (topics == null || topics.Count() == 0)
+                return;
+
+            CreateTopics(topics.ToArray());
+            _consumer.Subscribe(topics);
+        }
+
+        internal void CreateTopics(params string[] topics)
         {
             if (string.IsNullOrEmpty(_config?.BootstrapServers))
                 throw new ArgumentException("BootstrapServers it shouldn't be null!");
@@ -152,47 +195,6 @@ namespace Rebus.Kafka.Core
             }
         }
 
-        /// <inheritdoc />
-        public bool IsCentralized { get; } = true;
-
-        /// <inheritdoc />
-        public void Initialize()
-        {
-            _commitDispatcher = new CommitDispatcher(_log, _behaviorConfig);
-
-            // Note: If a key or value deserializer is not set (as is the case below), the 
-            // deserializer corresponding to the appropriate type from Confluent.Kafka.Serdes
-            // will be used automatically (where available). The default deserializer for string
-            // is UTF8. The default deserializer for Ignore returns null for all input data
-            // (including non-null data).
-            _consumer = new ConsumerBuilder<string, byte[]>(_config)
-                .SetKeyDeserializer(Deserializers.Utf8)
-                .SetValueDeserializer(Deserializers.ByteArray)
-                .SetLogHandler(ConsumerOnLog)
-                .SetErrorHandler(ConsumerOnError)
-                .SetStatisticsHandler(ConsumerOnStatistics)
-                .SetPartitionsAssignedHandler(ConsumerOnPartitionsAssigned)
-                .SetPartitionsRevokedHandler(ConsumerOnPartitionsRevoked)
-                .Build();
-                        
-            _commitDispatcher.OnCanCommit(tpos => _consumer.Commit(tpos));
-
-            var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
-            var tcs = new TaskCompletionSource<bool>();
-            _waitAssigned.TryAdd(topics, new KeyValuePair<string, TaskCompletionSource<bool>>(topics.First(), tcs));
-            ConsumerSubscribe(topics);
-            _initializationTask = tcs.Task;
-        }
-
-        void ConsumerSubscribe(IEnumerable<string> topics)
-        {
-            if (topics == null || topics.Count() == 0)
-                return;
-
-            CreateQueues(topics.ToArray());
-            _consumer.Subscribe(topics);
-        }
-
         /// <summary>
         /// Confirmation of the message
         /// </summary>
@@ -217,22 +219,36 @@ namespace Rebus.Kafka.Core
                 throw new RebusApplicationException($"Failed to not confirm message processing. ({result.Reason})");
         }
 
+        Result Commit(IReadOnlyList<TopicPartitionOffset> tpos)
+        {
+            try
+            {
+                var incrementedTpos = tpos.Select(tpo => new TopicPartitionOffset(tpo.Topic, tpo.Partition, new Offset(tpo.Offset.Value + 1)));
+                _consumer.Commit(incrementedTpos); // what an asshole is the one who came up with the idea of sending an inaccurate offset to the client!
+                return Result.Ok();
+            }
+            catch (Exception e)
+            {
+                return Result.Fail(e.ToString());
+            }
+        }
+
         internal bool IsInitialized => _initializationTask?.IsCompleted == true;
         private Task _initializationTask;
         private CommitDispatcher _commitDispatcher;
 
         #region logging
 
-        private void ConsumerOnLog(IConsumer<string, byte[]> sender, LogMessage logMessage)
+        private void ConsumerOnLogHandler(IConsumer<string, byte[]> sender, LogMessage logMessage)
         {
             if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
                 _log.Debug($"Consuming from Kafka. Client: '{logMessage.Name}', message: '{logMessage.Message}'.");
         }
 
-        private void ConsumerOnStatistics(IConsumer<string, byte[]> sender, string json)
+        private void ConsumerOnStatisticsHandler(IConsumer<string, byte[]> sender, string json)
             => _log.Info($"Consumer statistics: {json}");
 
-        private void ConsumerOnError(IConsumer<string, byte[]> sender, Error error)
+        private void ConsumerOnErrorHandler(IConsumer<string, byte[]> sender, Error error)
         {
             if (!error.IsFatal)
                 _log.Warn("Consumer error: {error}. No action required.", error);
@@ -249,9 +265,9 @@ namespace Rebus.Kafka.Core
             }
         }
 
-        private void ConsumerOnPartitionsAssigned(IConsumer<string, byte[]> sender, List<TopicPartition> partitions)
+        private void ConsumerOnPartitionsAssignedHandler(IConsumer<string, byte[]> sender, List<TopicPartition> partitions)
         {
-            _log.Debug($"Assigned partitions: [{string.Join(", ", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug($"Assigned partitions: \n\t{string.Join("\n\t", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             if (_waitAssigned.Count > 0)
             {
                 var topics = partitions.Select(p => p.Topic).Distinct();
@@ -259,17 +275,17 @@ namespace Rebus.Kafka.Core
                 foreach (var key in keys)
                 {
                     _waitAssigned.TryRemove(key, out var task);
-                    task.Value.SetResult(true);
                     _log.Info($"Subscribe on \"{task.Key}\"");
+                    task.Value.SetResult(true);
                 }
             }
             // possibly override the default partition assignment behavior:
             // consumer.Assign(...)
         }
 
-        private void ConsumerOnPartitionsRevoked(IConsumer<string, byte[]> sender, List<TopicPartitionOffset> partitionOffsets)
+        private void ConsumerOnPartitionsRevokedHandler(IConsumer<string, byte[]> sender, List<TopicPartitionOffset> partitionOffsets)
         {
-            _log.Debug($"Revoked partitions: [{string.Join(", ", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug($"Revoked partitions: \n\t{string.Join("\n\t", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             if (_waitRevoked.Count > 0)
             {
                 var topics = partitionOffsets.Select(p => p.Topic).Distinct();
@@ -277,11 +293,23 @@ namespace Rebus.Kafka.Core
                 foreach (var key in keys)
                 {
                     _waitRevoked.TryRemove(key, out var task);
-                    task.Value.SetResult(true);
                     _log.Info($"Unsubscribe from \"{task.Key}\"");
+                    task.Value.SetResult(true);
                 }
             }
             // consumer.Unassign()
+        }
+
+        private void ConsumerOnPartitionsLostHandler(IConsumer<string, byte[]> consumer, List<TopicPartitionOffset> topicPartitionOffsets)
+        {
+            var tpoView = topicPartitionOffsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
+            _log.Warn($"Partitions lost: \n\t{string.Join("\n\t", tpoView)}");
+        }
+
+        private void ConsumerOnOffsetsCommittedHandler(IConsumer<string, byte[]> consumer, CommittedOffsets committedOffsets)
+        {
+            var tpoView = committedOffsets.Offsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
+            _log.Warn($"Offsets committed: \n\t{string.Join("\n\t", tpoView)}");
         }
 
         #endregion
@@ -296,6 +324,7 @@ namespace Rebus.Kafka.Core
         private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
         private IConsumer<string, byte[]> _consumer;
         private readonly ConsumerConfig _config;
+        IRebusLoggerFactory _rebusLoggerFactory;
         readonly ILog _log;
         readonly IAsyncTaskFactory _asyncTaskFactory;
 
@@ -344,6 +373,7 @@ namespace Rebus.Kafka.Core
             _config.Set("fetch.message.max.bytes", "10240");
 
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));
+            _rebusLoggerFactory = rebusLoggerFactory;
             _log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
             _cancellationToken = cancellationToken;
 
@@ -361,6 +391,7 @@ namespace Rebus.Kafka.Core
             if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
                 throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
 
+            _rebusLoggerFactory = rebusLoggerFactory;
             _log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();
             _config = config ?? throw new NullReferenceException(nameof(config));
             if (_config.EnableAutoCommit == true)
@@ -386,20 +417,39 @@ namespace Rebus.Kafka.Core
             _behaviorConfig = consumerAndBehaviorConfig.BehaviorConfig;
         }
 
+        private bool isDisposed;
+
         /// <inheritdoc />
         public void Dispose()
         {
-            try
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (isDisposed) return;
+
+            if (disposing)
             {
-                if(_commitDispatcher.TryGetOffsetsThatCanBeCommit(out var tpos))
+                try
                 {
-                    _consumer.Commit(tpos);
+                    if (_commitDispatcher.TryGetOffsetsThatCanBeCommit(out var tpos))
+                    {
+                        Commit(tpos);
+                    }
                 }
+                catch (Exception) { /* ignored */ }
+                _consumer?.Close();
+                _log.Info($"Closed consumer BootstrapServers:{_config.BootstrapServers}, gropId: {_config.GroupId}.");
+                _consumer?.Dispose();
             }
-            catch (Exception) { /* ignored */ }
-            _consumer?.Close();
-            _log.Info($"Closed consumer BootstrapServers:{_config.BootstrapServers}, gropId: {_config.GroupId}.");
-            _consumer?.Dispose();
+            isDisposed = true;
+        }
+
+        ~KafkaSubscriptionStorage()
+        {
+            Dispose(false);
         }
 
         #endregion

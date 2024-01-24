@@ -16,7 +16,6 @@ using Rebus.Kafka.Configs;
 using System.Collections.Generic;
 using Rebus.Kafka.Extensions;
 using System.Linq;
-using Rebus.Sagas.Idempotent;
 
 namespace Rebus.Kafka
 {
@@ -29,17 +28,17 @@ namespace Rebus.Kafka
             // one-way client does not create any queues
             if (Address == null || _queueSubscriptionStorage == null)
                 return;
-            _queueSubscriptionStorage.CreateQueues(address);
+            _queueSubscriptionStorage.CreateTopics(address);
         }
         
         /// <summary>
         /// Sends all outgoing <see cref="TransportMessage"/> to the queue with the specified globally addressable name
         /// </summary>
         /// <exception cref="InvalidOperationException">If after waiting the procedure of transport initialization is still incomplete.</exception>
-        protected override async Task SendOutgoingMessages(IEnumerable<OutgoingTransportMessage> outgoingMessages, ITransactionContext context)
+        protected override Task SendOutgoingMessages(IEnumerable<OutgoingTransportMessage> outgoingMessages, ITransactionContext context)
         {
             if (!(outgoingMessages?.Any() == true))
-                return;
+                return Task.CompletedTask;
 
             if (context == null) throw new ArgumentNullException(nameof(context));
 
@@ -79,10 +78,10 @@ namespace Rebus.Kafka
                     result = await _producer.ProduceAsync(outgoingMessage.DestinationAddress, message);
                     if (result.Status == PersistenceStatus.NotPersisted)
                     {
-                        throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {message.ToReadableText()}");
+                        throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {outgoingMessage.TransportMessage.ToReadableText()}");
                     }
 #if DEBUG
-                    _log.Debug($"The following message was sent to the topic \"{outgoingMessage.DestinationAddress}\": {System.Text.Json.JsonSerializer.Serialize(message)}");
+                    _log.Debug($"The following message was sent to the topic \"{outgoingMessage.DestinationAddress}\": {outgoingMessage.TransportMessage.ToReadableText()}");
 #endif
                 }
                 catch (Exception ex)
@@ -96,6 +95,7 @@ namespace Rebus.Kafka
                     throw;
                 }
             });
+            return Task.CompletedTask;
         }
 
         /// <inheritdoc />
@@ -112,7 +112,7 @@ namespace Rebus.Kafka
                     _log.Debug($"context.OnAck : {receivedMessage.ToReadableText()}");
 #endif
                     _queueSubscriptionStorage.Ack(receivedMessage);
-                    return Task.CompletedTask; // Тут помечть сообщение обработанным и проверять не пора ли комитить самую старую порцию сообщений и комитить если пора _consumer.Commit...
+                    return Task.CompletedTask;
                 });
                 context.OnNack(tc =>
                 {

@@ -63,8 +63,6 @@ namespace KafkaAsOneWayTransport
                     key = Console.ReadKey().KeyChar;
                 } while (key == 'r' || key == 'к');
             }
-
-            Console.ReadKey();
         }
 
         const int MessageCount = 103;

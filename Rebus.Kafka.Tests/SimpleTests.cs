@@ -79,11 +79,10 @@ namespace Rebus.Kafka.Tests
             var builder = new ContainerBuilder();
             builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
             builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
-            var producerConfig = new ProducerConfig { BootstrapServers = BootstrapServer };
+            var producerConfig = new ProducerConfig();
             var consumerConfig = new ConsumerAndBehaviorConfig
             {
                 BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 10 },
-                BootstrapServers = BootstrapServer,
                 AllowAutoCreateTopics = true,
                 GroupId = nameof(SimpleTests),
                 AutoOffsetReset = AutoOffsetReset.Earliest,
