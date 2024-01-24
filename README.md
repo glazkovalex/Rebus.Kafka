@@ -36,9 +36,10 @@ See [examples](https://github.com/glazkovalex/Rebus.Kafka/tree/master/Examples) 
 * ["Transaction"](https://github.com/rebus-org/Rebus/wiki/Transactions) 
 * [Headers](https://github.com/glazkovalex/Rebus.Kafka/blob/d7297c278bc5ecf9181e48d443950073dd5fd7ed/Rebus.Kafka.Tests/SimpleTests.cs#L38)
 * [Timeouts](https://github.com/rebus-org/Rebus/wiki/Timeouts)
+
 Many others are probably supported too, but I haven't checked.
 
-### Additional features
+### Additional features:
 
 * When using the Rebus.ServiceProvider package, in order to avoid deadlocking, events should only be subscribed synchronously `bus.Subscribe<TestMessage>().Wait()`!
 * At the request of the transport users, the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default. However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
