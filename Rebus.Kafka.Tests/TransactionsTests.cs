@@ -2,6 +2,7 @@
 using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
+using Rebus.Kafka.Tests.Base;
 using Rebus.Kafka.Tests.Core;
 using Rebus.Kafka.Tests.Messages;
 using Rebus.Transport;
@@ -12,6 +13,7 @@ using Xunit.Abstractions;
 
 namespace Rebus.Kafka.Tests
 {
+    [Collection("Serial")]
     public class TransactionsTests : BaseTestWithKafkaContainer
     {
         [Fact]

@@ -22,12 +22,13 @@ using System.IO;
 using System.Reflection;
 using Confluent.Kafka;
 using Newtonsoft.Json.Linq;
-using Rebus.Kafka.Tests.Core;
+using Rebus.Kafka.Tests.Base;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Rebus.Kafka.Tests
 {
+    [Collection("Serial")]
     public partial class HeadersTests : BaseTestWithKafkaContainer
     {
         /// <summary>

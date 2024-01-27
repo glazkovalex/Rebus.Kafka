@@ -95,7 +95,6 @@ namespace Rebus.Kafka
                     throw;
                 }
             }));
-            return;
         }
 
         /// <inheritdoc />

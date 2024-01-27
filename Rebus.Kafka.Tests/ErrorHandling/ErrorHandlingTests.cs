@@ -6,8 +6,8 @@ using Rebus.Activation;
 using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
+using Rebus.Kafka.Tests.Base;
 using Rebus.Kafka.Tests.Core;
-using Rebus.Kafka.Tests.ErrorHandling;
 using Rebus.Kafka.Tests.Messages;
 using Rebus.Persistence.InMem;
 using Rebus.Retry.Simple;
@@ -15,8 +15,9 @@ using Rebus.Routing.TypeBased;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Rebus.Kafka.Tests
+namespace Rebus.Kafka.Tests.ErrorHandling
 {
+    [Collection("Serial")]
     public class ErrorHandlingTests : BaseTestWithKafkaContainer
     {
         [Fact]
@@ -137,7 +138,7 @@ namespace Rebus.Kafka.Tests
                     }).ToArray();
                 Task.WaitAll(messages);
                 await Task.Delay(10000);
-                messages = Enumerable.Range(MessageCount * 2 +1, MessageCount)
+                messages = Enumerable.Range(MessageCount * 2 + 1, MessageCount)
                     .Select(i =>
                     {
                         Interlocked.Add(ref sendAmount, i);

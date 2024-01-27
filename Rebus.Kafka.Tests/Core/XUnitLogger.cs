@@ -3,7 +3,7 @@ using System;
 using System.Text;
 using Xunit.Abstractions;
 
-namespace Fount.Web.Tests.Common.Logger
+namespace Rebus.Kafka.Tests.Core
 {
     /// <summary>
     /// Логер для внедрения в юнит-тесты

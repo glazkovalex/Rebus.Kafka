@@ -7,6 +7,7 @@ using Rebus.Bus;
 using Rebus.Config;
 using Rebus.Handlers;
 using Rebus.Kafka.Configs;
+using Rebus.Kafka.Tests.Base;
 using Rebus.Kafka.Tests.Core;
 using Rebus.Kafka.Tests.Messages;
 using Rebus.Routing.TypeBased;
@@ -22,6 +23,7 @@ using Xunit.Abstractions;
 
 namespace Rebus.Kafka.Tests
 {
+    [Collection("Serial")]
     public sealed class SimpleTests : BaseTestWithKafkaContainer
     {
         [Fact]

@@ -5,7 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Rebus.Bus;
 using Rebus.Config;
-using Rebus.Config.Outbox;
 using Rebus.Kafka;
 using Rebus.Kafka.Configs;
 using Rebus.Logging;
@@ -22,13 +21,13 @@ namespace IdempotentSaga
             using (var host = CreateHostBuilder(args).Build())
             {
                 IBus bus = host.Services.GetRequiredService<IBus>();
-                AllSubscriptions(bus).Wait(); //Do not use await and "OnCreated" to avoid deadlocking!
+                AllSubscriptions(bus).Wait(); // Do not use await and "OnCreated" to avoid deadlocking!
                 char key;
                 do
                 {
                     var message = new KickoffSagaMessages { SagaInstanceId = Guid.NewGuid() };
                     await bus.Publish(message);
-                    WriteBlueLine("Press any key to exit or 'r' to repeat.");
+                    Console.ForegroundColor = ConsoleColor.Blue; Console.WriteLine("Press 'r' to repeat or Ctrl+z to exit."); Console.ForegroundColor = ConsoleColor.Gray;
                     key = Console.ReadKey().KeyChar; 
                 } while (key == 'r' || key == 'к');
                 await host.StopAsync();
@@ -41,21 +40,19 @@ namespace IdempotentSaga
             builder.ConfigureServices((hostContext, services) =>
             {
                 var consoleLoggerFactory = new ConsoleLoggerFactory(true) { MinLevel = LogLevel.Debug };
-                //consoleLoggerFactory.Filters.Add(ls => ls.Text != "Checking outbox storage for pending messages" && ls.Text != "No pending messages found");
                 services.AddSingleton(consoleLoggerFactory);
                 services.AutoRegisterHandlersFromAssemblyOf<TestSaga>();
                 var consumerConfig = new ConsumerAndBehaviorConfig(kafkaEndpoint, "temp") { BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 1 } };
                 services.AddRebus((configurer, serviceProvider) => configurer
                     .Logging(l => l.Use(consoleLoggerFactory))
                     .Transport(t => t.UseKafka(kafkaEndpoint, $"{nameof(IdempotentSaga)}.queue", new ProducerConfig(), consumerConfig))
-                    //.Outbox(o => o.StoreInPostgreSql(connectionString, "rebus.Outbox"))
-                    //.RetryStrategy(maxDeliveryAttempts: 3, errorQueueName: $"{nameof(IdempotentSaga)}.queue.error"))
                     .Sagas(s => s.StoreInPostgres(connectionString, "SagasData", "SagasIndex", true, null, schemaName: "rebus"))
                     .Timeouts(t => t.StoreInPostgres(new PostgresConnectionHelper(connectionString), "Timeouts", true, "rebus"))
-                    .Options(b =>
+                    .Options(o =>
                     {
-                        b.EnableIdempotentSagas();
-                        b.UseAttributeOrTypeFullNameForTopicNames();
+                        o.EnableIdempotentSagas();
+                        o.RetryStrategy($"{nameof(IdempotentSaga)}.queue.error", 3);
+                        o.UseAttributeOrTypeFullNameForTopicNames();
                     })
                 );
             });
@@ -68,13 +65,6 @@ namespace IdempotentSaga
             await bus.Subscribe<SagaMessageEarth>();
             await bus.Subscribe<SagaMessageWind>();
             await bus.Subscribe<SagaMessageFire>();
-        }
-
-        internal static void WriteBlueLine(string text)
-        {
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine(text);
-            Console.ForegroundColor = ConsoleColor.Gray;
         }
 
         static int counter = 0;

@@ -1,18 +1,19 @@
-﻿using Fount.Web.Tests.Common.Logger;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using Rebus.Kafka.Tests.Core;
 using System.Threading.Tasks;
 using Testcontainers.Kafka;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Rebus.Kafka.Tests.Core
+namespace Rebus.Kafka.Tests.Base
 {
     /// <summary>
     /// Base class for test classes that require capturing
     /// </summary>
     public abstract class BaseTestWithKafkaContainer : IAsyncLifetime
     {
-        protected readonly KafkaContainer _kafkaContainer = new KafkaBuilder().WithImage("confluentinc/cp-kafka:7.0.1").Build();
+        internal const string IMAGE_NAME = "confluentinc/cp-kafka:7.0.1";
+        protected readonly KafkaContainer _kafkaContainer = new KafkaBuilder().WithImage(IMAGE_NAME).Build();
 
         public async Task InitializeAsync()
         {

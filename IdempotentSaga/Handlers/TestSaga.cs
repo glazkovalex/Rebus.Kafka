@@ -5,7 +5,7 @@ using Rebus.Sagas.Idempotent;
 using Rebus.Sagas;
 using IdempotentSaga.Messages;
 using Rebus.Logging;
-using Rebus.Kafka;
+using Rebus.Messages;
 
 namespace IdempotentSaga.Handlers
 {
@@ -22,11 +22,23 @@ namespace IdempotentSaga.Handlers
             _logger.Info("Processing Kickoff - {id}", Data.SagaInstanceId);
             Data.SagaInstanceId = message.SagaInstanceId;
             Data.StuffDone += "Initiated;";
+/*/
+            string messageId = Guid.NewGuid().ToString();
+            await Task.WhenAll(Enumerable.Range(1, 2).Select(async i =>
+            {
+                await _bus.Publish(new SagaMessageEarth
+                {
+                    SagaInstanceId = message.SagaInstanceId
+                }, new Dictionary<string, string> { { Headers.MessageId, messageId } });
+                _logger.Info("Published Earth....Done Processing Kickoff - {id}", Data.SagaInstanceId);
+            }));
+/*/
             await _bus.Publish(new SagaMessageEarth()
             {
                 SagaInstanceId = message.SagaInstanceId
             });
             _logger.Info("Published Earth....Done Processing Kickoff - {id}", Data.SagaInstanceId);
+/**/
         }
 
         public async Task Handle(SagaMessageEarth message)
@@ -44,6 +56,13 @@ namespace IdempotentSaga.Handlers
                     SagaInstanceId = message.SagaInstanceId
                 });
                 PossiblyDone();
+//#if DEBUG
+//                if (first)
+//                {
+//                    first = false;
+//                    throw new InvalidOperationException("Text exeption");
+//                }
+//#endif
                 _logger.Info("Published Wind...Done Processing Earth - {id}", Data.SagaInstanceId);
             }
             catch (Exception e)
@@ -68,6 +87,7 @@ namespace IdempotentSaga.Handlers
                     SagaInstanceId = message.SagaInstanceId
                 });
                 PossiblyDone();
+
                 _logger.Info("Published Fire...Done Processing Wind - {id}", Data.SagaInstanceId);
             }
             catch (Exception e)
@@ -137,9 +157,10 @@ namespace IdempotentSaga.Handlers
         }
 
         private IBus _bus;
-
         private ILog _logger;
-
+#if DEBUG
+        static bool first = true;
+#endif
         public TestSaga(IBus bus, ConsoleLoggerFactory loggerFactory)
         {
             _bus = bus ?? throw new ArgumentNullException();

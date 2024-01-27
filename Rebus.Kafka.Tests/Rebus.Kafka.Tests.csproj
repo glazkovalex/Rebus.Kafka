@@ -21,8 +21,4 @@
     <ProjectReference Include="..\Rebus.Kafka\Rebus.Kafka.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="ErrorHandling\" />
-  </ItemGroup>
-
 </Project>
