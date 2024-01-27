@@ -35,10 +35,10 @@ namespace Rebus.Kafka
         /// Sends all outgoing <see cref="TransportMessage"/> to the queue with the specified globally addressable name
         /// </summary>
         /// <exception cref="InvalidOperationException">If after waiting the procedure of transport initialization is still incomplete.</exception>
-        protected override Task SendOutgoingMessages(IEnumerable<OutgoingTransportMessage> outgoingMessages, ITransactionContext context)
+        protected override async Task SendOutgoingMessages(IEnumerable<OutgoingTransportMessage> outgoingMessages, ITransactionContext context)
         {
             if (!(outgoingMessages?.Any() == true))
-                return Task.CompletedTask;
+                return;
 
             if (context == null) throw new ArgumentNullException(nameof(context));
 
@@ -64,7 +64,7 @@ namespace Rebus.Kafka
                     }
             }
 
-            Parallel.ForEach(outgoingMessages, async (outgoingMessage) =>
+            await Task.WhenAll(outgoingMessages.Select(async (outgoingMessage) =>
             {
                 DeliveryResult<string, byte[]> result = null;
                 try
@@ -94,8 +94,8 @@ namespace Rebus.Kafka
                         result?.Value.ToString() ?? "N/A");
                     throw;
                 }
-            });
-            return Task.CompletedTask;
+            }));
+            return;
         }
 
         /// <inheritdoc />

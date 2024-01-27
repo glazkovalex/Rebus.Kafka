@@ -44,7 +44,7 @@ namespace IdempotentSaga
                 //consoleLoggerFactory.Filters.Add(ls => ls.Text != "Checking outbox storage for pending messages" && ls.Text != "No pending messages found");
                 services.AddSingleton(consoleLoggerFactory);
                 services.AutoRegisterHandlersFromAssemblyOf<TestSaga>();
-                var consumerConfig = new ConsumerAndBehaviorConfig(kafkaEndpoint, "temp") { BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 5 } };
+                var consumerConfig = new ConsumerAndBehaviorConfig(kafkaEndpoint, "temp") { BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 1 } };
                 services.AddRebus((configurer, serviceProvider) => configurer
                     .Logging(l => l.Use(consoleLoggerFactory))
                     .Transport(t => t.UseKafka(kafkaEndpoint, $"{nameof(IdempotentSaga)}.queue", new ProducerConfig(), consumerConfig))
