@@ -30,7 +30,7 @@ See [examples](https://github.com/glazkovalex/Rebus.Kafka/tree/master/Examples) 
 * Additional Apache Kafka transport. The tests use an [confluentinc/cp-kafka](https://hub.docker.com/r/confluentinc/cp-kafka) container.
 * [Routing](https://github.com/rebus-org/Rebus/wiki/Routing)
 * [Pub sub messaging](https://github.com/rebus-org/Rebus/wiki/Pub-sub-messaging)
-* [Process managers (sagas)](https://github.com/rebus-org/RebusSamples/blob/master/Sagas/README.md). See [example](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L53).
+* [Process managers (sagas)](https://github.com/rebus-org/RebusSamples/blob/master/Sagas/README.md). See [example](https://github.com/glazkovalex/Rebus.Kafka/blob/14e06b88634b9b2b1051026ed808b7f1148bab52/Examples/IdempotentSaga/Program.cs#L49).
 * [Workers and parallelism](https://github.com/rebus-org/Rebus/wiki/Workers-and-parallelism)
 * [Automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling)
 * ["Transaction"](https://github.com/rebus-org/Rebus/wiki/Transactions) 
