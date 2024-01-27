@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Rebus.Kafka\Rebus.Kafka.csproj" />
+    <ProjectReference Include="..\..\Rebus.Kafka\Rebus.Kafka.csproj" />
   </ItemGroup>
 
 </Project>
