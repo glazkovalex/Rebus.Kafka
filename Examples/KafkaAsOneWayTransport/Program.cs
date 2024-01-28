@@ -32,7 +32,7 @@ namespace KafkaAsOneWayTransport
 
                 Configure.With(adapter)
                     .Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
-                    .Transport(t => t.UseKafka(kafkaEndpoint, nameof(KafkaAsOneWayTransport), "temp"))
+                    .Transport(t => t.UseKafka(kafkaEndpoint, $"{typeof(Program).Namespace}.queue", "temp"))
                     .Options(o =>
                     {
                         o.SetNumberOfWorkers(10);
@@ -43,7 +43,7 @@ namespace KafkaAsOneWayTransport
                 Configure.With(oneWayAdapter)
                     .Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
                     .Transport(t => t.UseKafkaAsOneWayClient(kafkaEndpoint))
-                    .Routing(r => r.TypeBased().Map<TestMessage>(nameof(KafkaAsOneWayTransport)))
+                    .Routing(r => r.TypeBased().Map<TestMessage>($"{typeof(Program).Namespace}.queue"))
                     .Start();
 
                 char key;

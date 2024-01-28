@@ -33,14 +33,14 @@ namespace RetryStrategy
 
                 Configure.With(adapter)
                     .Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
-                    .Transport(t => t.UseKafka(kafkaEndpoint, nameof(RetryStrategy), "temp"))
+                    .Transport(t => t.UseKafka(kafkaEndpoint, $"{typeof(Program).Namespace}.queue", "temp"))
                     .Options(b => b.RetryStrategy(maxDeliveryAttempts: 3, errorQueueName: "retries.on.error.queue"))
                     .Start();
 
                 Configure.With(oneWayAdapter)
                     .Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Debug))
                     .Transport(t => t.UseKafkaAsOneWayClient(kafkaEndpoint))
-                    .Routing(r => r.TypeBased().Map<TestMessage>(nameof(RetryStrategy)))
+                    .Routing(r => r.TypeBased().Map<TestMessage>($"{typeof(Program).Namespace}.queue"))
                     .Start();
 
                 char key;
@@ -77,7 +77,7 @@ namespace RetryStrategy
         }
 
         static int counter = 0;
-        const int MessageCount = 10;
+        const int MessageCount = 50;
         static readonly string kafkaEndpoint = "confluent-kafka:9092";
     }
 }

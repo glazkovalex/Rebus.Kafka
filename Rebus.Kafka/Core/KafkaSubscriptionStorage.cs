@@ -166,7 +166,7 @@ namespace Rebus.Kafka.Core
                     {
                         try
                         {
-                            adminClient.CreateTopicsAsync(missingTopics.Select(mt => new TopicSpecification { Name = mt, ReplicationFactor = 1, NumPartitions = 1 }),
+                            adminClient.CreateTopicsAsync(missingTopics.Select(mt => new TopicSpecification { Name = mt, ReplicationFactor = 1, NumPartitions = 1 }), //
                                 new CreateTopicsOptions { ValidateOnly = false }).GetAwaiter().GetResult();
                             existingsTopics = adminClient.GetMetadata(TimeSpan.FromSeconds(100)).Topics
                                 .Where(topicMetadata => topicMetadata.Error.Code != ErrorCode.UnknownTopicOrPart || topicMetadata.Error.Code == ErrorCode.Local_UnknownTopic)

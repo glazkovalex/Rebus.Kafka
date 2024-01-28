@@ -19,7 +19,7 @@ namespace TwoBusInHost
             var host = CreateHostBuilder(args).Build();
             host.RunAsync();
             var busRegistry = host.Services.GetRequiredService<IBusRegistry>();
-            IBus busOneWay = busRegistry.GetBus("OneWayBus1");
+            IBus busOneWay = busRegistry.GetBus("OneWayBus");
             char key;
             do
             {
@@ -47,7 +47,7 @@ namespace TwoBusInHost
             builder.ConfigureServices((hostContext, services) =>
             {
                 var consoleLoggerFactory = new ConsoleLoggerFactory(true) { MinLevel = LogLevel.Debug };
-                var queue = $"{nameof(TwoBusInHost)}.queue";
+                var queue = $"{typeof(Program).Namespace}.queue";
                 services.AddSingleton(consoleLoggerFactory);
                 services.AddRebusHandler<TestMessageHandler>();
                 services.AddRebus((configurer, serviceProvider) => configurer

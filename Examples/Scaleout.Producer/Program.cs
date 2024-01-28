@@ -54,7 +54,7 @@ namespace Scaleout.Producer
 			builder.RegisterType<ConfirmationHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Confirmation)));
 			builder.RegisterRebus((configurer, context) => configurer
 				.Logging(l => l.ColoredConsole(Rebus.Logging.LogLevel.Info))
-				.Transport(t => t.UseKafka(_kafkaEndpoint, "scaleout.producer", producerConfig, consumerConfig))
+				.Transport(t => t.UseKafka(_kafkaEndpoint, $"{typeof(Program).Namespace}.queue", producerConfig, consumerConfig))
                 .Options(o => {
                     o.UseAttributeOrTypeFullNameForTopicNames();
                 })
@@ -86,6 +86,6 @@ namespace Scaleout.Producer
 			}
 		}
 		static readonly string _kafkaEndpoint = "confluent-kafka:9092";
-		public static readonly int ItemCount = 10;
+		public static readonly int ItemCount = 50;
 	}
 }
