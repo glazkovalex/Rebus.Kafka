@@ -14,7 +14,7 @@ namespace Scaleout.Producer
 {
     class Program
 	{
-		static void Main(string[] args)
+		static async Task Main(string[] args)
 		{
 			var producerConfig = new ProducerConfig
 			{
@@ -63,7 +63,7 @@ namespace Scaleout.Producer
 			using (container = builder.Build())
 			using (IBus bus = container.Resolve<IBus>())
 			{
-				bus.Subscribe<Confirmation>().Wait();
+				await bus.Subscribe<Confirmation>();
 
 				char key;
 				do
@@ -71,18 +71,16 @@ namespace Scaleout.Producer
 					var sw = Stopwatch.StartNew();
 					var sendAmount = 0;
 					var messages = Enumerable.Range(1, ItemCount)
-						.Select(i =>
+						.Select(async i =>
 						{
 							sendAmount = sendAmount + i;
-							return bus.Publish(new TestMessage { MessageNumber = i });
+							await bus.Publish(new TestMessage { MessageNumber = i });
 						}).ToArray();
-					Task.WaitAll(messages);
+					await Task.WhenAll(messages);
 					Console.WriteLine($"Send: {sendAmount} for {sw.ElapsedMilliseconds / 1000f:N3}c");
 					Console.WriteLine("Press any key to exit or 'r' to repeat.");
 					key = Console.ReadKey().KeyChar;
 				} while (key == 'r' || key == 'к');
-
-				bus.Unsubscribe<Confirmation>().Wait(); // only for test
 			}
 		}
 		static readonly string _kafkaEndpoint = "confluent-kafka:9092";

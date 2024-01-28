@@ -276,7 +276,7 @@ namespace Rebus.Kafka.Core
                 {
                     _waitAssigned.TryRemove(key, out var task);
                     _log.Info($"Subscribe on \"{task.Key}\"");
-                    task.Value.SetResult(true);
+                    Task.Run(() => task.Value.SetResult(true));
                 }
             }
             // possibly override the default partition assignment behavior:

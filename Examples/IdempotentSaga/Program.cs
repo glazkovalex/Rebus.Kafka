@@ -21,7 +21,7 @@ namespace IdempotentSaga
             using (var host = CreateHostBuilder(args).Build())
             {
                 IBus bus = host.Services.GetRequiredService<IBus>();
-                AllSubscriptions(bus).Wait(); // Do not use await and "OnCreated" to avoid deadlocking!
+                await AllSubscriptions(bus); // Do not use "OnCreated" to avoid deadlocking!
                 char key;
                 do
                 {
@@ -45,7 +45,7 @@ namespace IdempotentSaga
                 var consumerConfig = new ConsumerAndBehaviorConfig(kafkaEndpoint, "temp") { BehaviorConfig = new ConsumerBehaviorConfig { CommitPeriod = 1 } };
                 services.AddRebus((configurer, serviceProvider) => configurer
                     .Logging(l => l.Use(consoleLoggerFactory))
-                    .Transport(t => t.UseKafka(kafkaEndpoint, $"{typeof(Program).Namespace}.queue", new ProducerConfig(), consumerConfig))
+                    .Transport(t => t.UseKafka(kafkaEndpoint, $"{nameof(IdempotentSaga)}.queue", new ProducerConfig(), consumerConfig))
                     .Sagas(s => s.StoreInPostgres(connectionString, "SagasData", "SagasIndex", true, null, schemaName: "rebus"))
                     .Timeouts(t => t.StoreInPostgres(new PostgresConnectionHelper(connectionString), "Timeouts", true, "rebus"))
                     .Options(o =>
