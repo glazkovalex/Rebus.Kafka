@@ -11,7 +11,7 @@ namespace Rebus.Kafka.Tests.Messages
         /// <inheritdoc />
         public Task Handle(SecondMessage evnt)
         {
-            Counter.Add(evnt.MessageNumber);
+            Counter.Add(evnt);
             _output.WriteLine($"SecondMessageHandler received : \"{evnt.MessageNumber}\"");
             return Task.CompletedTask;
         }

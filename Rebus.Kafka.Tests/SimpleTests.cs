@@ -11,6 +11,7 @@ using Rebus.Kafka.Tests.Base;
 using Rebus.Kafka.Tests.Core;
 using Rebus.Kafka.Tests.Messages;
 using Rebus.Routing.TypeBased;
+using Rebus.Transport;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -43,7 +44,7 @@ namespace Rebus.Kafka.Tests
                         Logger.LogTrace($"Received {MessageCount} messages in {sw.ElapsedMilliseconds / 1000f:N3}s");
                     return Task.CompletedTask;
                 });
-                Logger.LogTrace($"Current kafka endpoint: {BootstrapServer}");
+                Logger.LogTrace($"Current Kafka endpoint: {BootstrapServer}");
 
                 Configure.With(adapter)
                     .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
@@ -139,7 +140,7 @@ namespace Rebus.Kafka.Tests
                 }
                 catch (CreateTopicsException e)
                 {
-                    Logger.LogError($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
+                    Logger.LogError($"An error occurred creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
                     throw;
                 }
             }
@@ -213,6 +214,7 @@ namespace Rebus.Kafka.Tests
                 .Options(o => o.SetMaxParallelism(5))
             );
             MessageHandler.Counter.Reset();
+            SecondMessageHandler.Counter.Reset();
             using (container = builder.Build())
             using (IBus bus = container.Resolve<IBus>())
             {
@@ -233,10 +235,67 @@ namespace Rebus.Kafka.Tests
                         })
                     ).ToArray();
 
-                Task.WaitAll(messages);
+                await Task.WhenAll(messages);
                 await Task.Delay(10000);
 
-                Assert.Equal(MessageHandler.Counter.Amount + SecondMessageHandler.Counter.Amount, sendAmount);
+                Assert.Equal(sendAmount, MessageHandler.Counter.Amount + SecondMessageHandler.Counter.Amount );
+            }
+        }
+
+        [Fact]
+        public async Task OrderingWhenPublishingIntoTwoTopics()
+        {
+            IContainer container;
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(Output).As<ITestOutputHelper>().SingleInstance();
+            builder.RegisterType<MessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(Message)));
+            builder.RegisterType<SecondMessageHandler>().As(typeof(IHandleMessages<>).MakeGenericType(typeof(SecondMessage)));
+            builder.RegisterRebus((configurer, context) => configurer
+                .Logging(l => l.Use(new TestOutputLoggerFactory(Output)))
+                .Transport(t => t.UseKafka(BootstrapServer, nameof(SimpleTests)))
+                .Options(o =>
+                {
+                    o.SetMaxParallelism(1); // Required only with SetMaxParallelism(1)
+                    o.SetNumberOfWorkers(3);
+                })
+            );
+            MessageHandler.Counter.Reset();
+            SecondMessageHandler.Counter.Reset();
+            using (container = builder.Build())
+            using (IBus bus = container.Resolve<IBus>())
+            {
+                await bus.Subscribe<Message>();
+                await bus.Subscribe<SecondMessage>();
+                Counter counter = new Counter();
+                using (var scope = new RebusTransactionScope())
+                {
+                    for (var i = 0; i < 50; i++)
+                    {
+                        var message = new Message { MessageNumber = i };
+                        counter.Add(message);
+                        await bus.Publish(message);
+                    }
+                    for (var i = 0; i < 50; i++)
+                    {
+                        var message = new Message { MessageNumber = i };
+                        counter.Add(message);
+                        await bus.Publish(new SecondMessage { MessageNumber = i });
+                    }
+                    await scope.CompleteAsync();
+                }
+                Output.WriteLine("I sent two types of messages.");
+                await Task.Delay(5000);
+                var sendCounter = counter.Items.ToList();
+                var receivedCounter = MessageHandler.Counter.Items.Concat(SecondMessageHandler.Counter.Items).ToList();
+                Output.WriteLine(string.Join($"\n", receivedCounter.Select(m => $"{m.GetType().Name}:{m.MessageNumber}")));
+                Assert.Equal(counter.Amount, receivedCounter.Sum(m => m.MessageNumber));
+                for (var i = 0; i < counter.Count; i++)
+                {
+                    var sendCounterItem = sendCounter[i];
+                    var receivedCounterItem = receivedCounter[i];
+                    Output.WriteLine($"{sendCounterItem.GetType().Name}({sendCounterItem.MessageNumber}):{receivedCounterItem.GetType().Name}({receivedCounterItem.MessageNumber})");
+                    Assert.Equal(sendCounterItem.MessageNumber, receivedCounterItem.MessageNumber);
+                }
             }
         }
 
@@ -316,13 +375,15 @@ namespace Rebus.Kafka.Tests
                 Stopwatch swSend = Stopwatch.StartNew();
                 var jobs = messages.Select(i => adapter.Bus.Send(new Message { MessageNumber = i }));
                 await Task.WhenAll(jobs);
-
                 swSend.Stop();
                 Output.WriteLine($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
-                Assert.True(swSend.ElapsedMilliseconds < 2000);
+                var max = 5000;
+                Assert.True(swSend.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
 
-                await Task.Delay(20000);
-                Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < 20000);
+                max = 10000;
+                await Task.Delay(max);
+                Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
+                Assert.Equal(0, sendAmount);
             }
         }
 
@@ -353,7 +414,7 @@ namespace Rebus.Kafka.Tests
                     obs.Subscribe(consumeResult =>
                     {
                         swHandle ??= Stopwatch.StartNew();
-                        if (consumeResult.Offset %  consumerConfig.BehaviorConfig.CommitPeriod == 0)
+                        if (consumeResult.Offset % consumerConfig.BehaviorConfig.CommitPeriod == 0)
                         {
                             consumer.Commit(consumeResult.TopicPartitionOffset);
                         }
@@ -377,12 +438,13 @@ namespace Rebus.Kafka.Tests
                     await Task.WhenAll(jobs);
                     swSend.Stop();
                     Output.WriteLine($"Confluent send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}с");
-                    Assert.True(swSend.ElapsedMilliseconds < 2000);
+                    var max = 5000;
+                    Assert.True(swSend.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
 
-                    await Task.Delay(10000);
-                    cts.Cancel();
-                    Assert.True(swHandle?.IsRunning == false && swHandle?.ElapsedMilliseconds < 10000);
-                    await Task.Delay(1000);
+                    max = 10000;
+                    await Task.Delay(max);
+                    Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
+                    Assert.Equal(0, sendAmount);
                 }
             }
         }

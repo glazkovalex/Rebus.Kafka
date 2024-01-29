@@ -49,52 +49,54 @@ namespace Rebus.Kafka
                     {
                         const int waitSecont = 300; //5 minutes
                         int count = waitSecont * 10;
-                        _log.Info($"Start waiting for the initialization to complete for {count / 600:N0} minutes...");
+                        _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Start waiting for the initialization to complete for {count / 600:N0} minutes...");
                         while (_queueSubscriptionStorage?.IsInitialized == false)
                         {
                             Thread.Sleep(100);
                             if (--count <= 0)
                                 throw new InvalidOperationException(
-                                    $"After waiting for {waitSecont / 60:N0} minutes, the procedure of transport initialization is still incomplete."
+                                    $"Thread #{Thread.CurrentThread.ManagedThreadId} After waiting for {waitSecont / 60:N0} minutes, the procedure of transport initialization is still incomplete."
                                     + " There is no confirmation of completion of the subscription to the input queue."
                                     + " Try pausing before sending the first message, or handling this exception in a"
                                     + " loop to wait for the consumer's subscription to your queue to complete.");
                         }
-                        _log.Info("The transport initialization is complete.");
+                        _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} The transport initialization is complete.");
                     }
             }
-
-            await Task.WhenAll(outgoingMessages.Select(async (outgoingMessage) =>
+            await Task.WhenAll(outgoingMessages.GroupBy(m => new { m.DestinationAddress }).Select(async group =>
             {
-                DeliveryResult<string, byte[]> result = null;
-                try
+                foreach (var outgoingMessage in group)
                 {
-                    var headers = new Confluent.Kafka.Headers();
-                    foreach (var header in outgoingMessage.TransportMessage.Headers)
+                    DeliveryResult<string, byte[]> result = null;
+                    try
                     {
-                        headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
-                    }
-                    var message = new Message<string, byte[]> { Value = outgoingMessage.TransportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
-                    result = await _producer.ProduceAsync(outgoingMessage.DestinationAddress, message);
-                    if (result.Status == PersistenceStatus.NotPersisted)
-                    {
-                        throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {outgoingMessage.TransportMessage.ToReadableText()}");
-                    }
+                        var headers = new Confluent.Kafka.Headers();
+                        foreach (var header in outgoingMessage.TransportMessage.Headers)
+                        {
+                            headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                        }
+                        var message = new Message<string, byte[]> { Value = outgoingMessage.TransportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
+                        result = await _producer.ProduceAsync(outgoingMessage.DestinationAddress, message).ConfigureAwait(false);
+                        if (result.Status == PersistenceStatus.NotPersisted)
+                        {
+                            throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {outgoingMessage.TransportMessage.ToReadableText()}");
+                        }
 #if DEBUG
-                    _log.Debug($"The following message was sent to the topic \"{outgoingMessage.DestinationAddress}\": {outgoingMessage.TransportMessage.ToReadableText()}");
+                        _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} the following message was sent to the topic \"{outgoingMessage.DestinationAddress}\" in t: {outgoingMessage.TransportMessage.ToReadableText()}");
 #endif
+                    }
+                    catch (Exception ex)
+                    {
+                        _log?.Error(ex,
+                            "Error producing to Kafka. Topic/partition: '{topic}/{partition}'. Key: {key}; Value: {value}'.",
+                            outgoingMessage.DestinationAddress,
+                            result?.Partition.ToString() ?? "N/A",
+                            result?.Key ?? "N/A",
+                            result?.Value.ToString() ?? "N/A");
+                        throw;
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _log?.Error(ex,
-                        "Error producing to Kafka. Topic/partition: '{topic}/{partition}'. Key: {key}; Value: {value}'.",
-                        outgoingMessage.DestinationAddress,
-                        result?.Partition.ToString() ?? "N/A",
-                        result?.Key ?? "N/A",
-                        result?.Value.ToString() ?? "N/A");
-                    throw;
-                }
-            }));
+            })).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
@@ -108,7 +110,7 @@ namespace Rebus.Kafka
                 context.OnAck(tc =>
                 {
 #if DEBUG
-                    _log.Debug($"context.OnAck : {receivedMessage.ToReadableText()}");
+                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} context.OnAck : {receivedMessage.ToReadableText()}");
 #endif
                     _queueSubscriptionStorage.Ack(receivedMessage);
                     return Task.CompletedTask;
@@ -116,7 +118,7 @@ namespace Rebus.Kafka
                 context.OnNack(tc =>
                 {
 #if DEBUG
-                    _log.Debug($"context.OnNack : {receivedMessage.ToReadableText()}");
+                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} context.OnNack : {receivedMessage.ToReadableText()}");
 #endif
                     _queueSubscriptionStorage.Nack(receivedMessage);
                     return Task.CompletedTask;
@@ -159,7 +161,7 @@ namespace Rebus.Kafka
         /// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
         public void Initialize()
         {
-            _log.Info($"Initializing Kafka transport with queue \"{Address}\"");
+            _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Initializing Kafka transport with queue \"{Address}\"");
             var builder = new ProducerBuilder<string, byte[]>(_producerConfig)
                 .SetKeySerializer(Serializers.Utf8)
                 .SetValueSerializer(Serializers.ByteArray)
@@ -189,8 +191,8 @@ namespace Rebus.Kafka
         #region logging
 
         private void ProducerOnLog(IProducer<string, byte[]> sender, LogMessage logMessage)
-            => _log.Debug("Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
-                logMessage.Name, logMessage.Level, logMessage.Message);
+            => _log.Debug("Thread #{thread} Producing to Kafka. Client: {client}, syslog level: '{logLevel}', message: {logMessage}.",
+                Thread.CurrentThread.ManagedThreadId, logMessage.Name, logMessage.Level, logMessage.Message);
 
         private void ProducerOnStatistics(IProducer<string, byte[]> sender, string json)
             => _log.Info($"Producer statistics: {json}");

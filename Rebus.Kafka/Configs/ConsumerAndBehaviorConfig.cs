@@ -37,6 +37,7 @@ namespace Rebus.Kafka.Configs
             AutoOffsetReset = Confluent.Kafka.AutoOffsetReset.Latest;
             EnablePartitionEof = true;
             AllowAutoCreateTopics = true;
+            //MaxPollIntervalMs = 300000; Increase for long-term message processing
         }
     }
 }

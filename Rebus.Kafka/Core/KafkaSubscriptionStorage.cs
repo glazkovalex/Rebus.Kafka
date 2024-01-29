@@ -242,21 +242,22 @@ namespace Rebus.Kafka.Core
         private void ConsumerOnLogHandler(IConsumer<string, byte[]> sender, LogMessage logMessage)
         {
             if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
-                _log.Debug($"Consuming from Kafka. Client: '{logMessage.Name}', message: '{logMessage.Message}'.");
+                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Consuming from Kafka. Client: '{logMessage.Name}', message: '{logMessage.Message}'.");
         }
 
         private void ConsumerOnStatisticsHandler(IConsumer<string, byte[]> sender, string json)
-            => _log.Info($"Consumer statistics: {json}");
+            => _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Consumer statistics: {json}");
 
         private void ConsumerOnErrorHandler(IConsumer<string, byte[]> sender, Error error)
         {
             if (!error.IsFatal)
-                _log.Warn("Consumer error: {error}. No action required.", error);
+                _log.Warn($"Thread #{Thread.CurrentThread.ManagedThreadId} Consumer error: {error}. No action required.");
             else
             {
                 var values = sender.Assignment;
                 _log.Error(
-                    "Fatal error consuming from Kafka. Topic/partition/offset: '{topic}/{partition}/{offset}'. Error: '{error}'.",
+                    "Thread #{thread} Fatal error consuming from Kafka. Topic/partition/offset: '{topic}/{partition}/{offset}'. Error: '{error}'.",
+                    Thread.CurrentThread.ManagedThreadId,
                     string.Join(",", values.Select(a => a.Topic)),
                     string.Join(",", values.Select(a => a.Partition.Value)),
                     string.Join(",", values.Select(sender.Position)),
@@ -267,7 +268,7 @@ namespace Rebus.Kafka.Core
 
         private void ConsumerOnPartitionsAssignedHandler(IConsumer<string, byte[]> sender, List<TopicPartition> partitions)
         {
-            _log.Debug($"Assigned partitions: \n\t{string.Join("\n\t", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Assigned partitions: \n\t{string.Join("\n\t", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             if (_waitAssigned.Count > 0)
             {
                 var topics = partitions.Select(p => p.Topic).Distinct();
@@ -285,7 +286,7 @@ namespace Rebus.Kafka.Core
 
         private void ConsumerOnPartitionsRevokedHandler(IConsumer<string, byte[]> sender, List<TopicPartitionOffset> partitionOffsets)
         {
-            _log.Debug($"Revoked partitions: \n\t{string.Join("\n\t", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Revoked partitions: \n\t{string.Join("\n\t", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
             if (_waitRevoked.Count > 0)
             {
                 var topics = partitionOffsets.Select(p => p.Topic).Distinct();
@@ -294,7 +295,7 @@ namespace Rebus.Kafka.Core
                 {
                     _waitRevoked.TryRemove(key, out var task);
                     _log.Info($"Unsubscribe from \"{task.Key}\"");
-                    task.Value.SetResult(true);
+                    Task.Run(() => task.Value.SetResult(true));
                 }
             }
             // consumer.Unassign()
@@ -303,13 +304,13 @@ namespace Rebus.Kafka.Core
         private void ConsumerOnPartitionsLostHandler(IConsumer<string, byte[]> consumer, List<TopicPartitionOffset> topicPartitionOffsets)
         {
             var tpoView = topicPartitionOffsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
-            _log.Warn($"Partitions lost: \n\t{string.Join("\n\t", tpoView)}");
+            _log.Warn($"Thread #{Thread.CurrentThread.ManagedThreadId} Partitions lost: \n\t{string.Join("\n\t", tpoView)}");
         }
 
         private void ConsumerOnOffsetsCommittedHandler(IConsumer<string, byte[]> consumer, CommittedOffsets committedOffsets)
         {
             var tpoView = committedOffsets.Offsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
-            _log.Warn($"Offsets committed: \n\t{string.Join("\n\t", tpoView)}");
+            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Offsets committed: \n\t{string.Join("\n\t", tpoView)}");
         }
 
         #endregion

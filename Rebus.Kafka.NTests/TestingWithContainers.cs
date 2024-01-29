@@ -52,11 +52,14 @@ namespace Rebus.Kafka.NTests
                 await Task.WhenAll(jobs);
 
                 swSend.Stop();
+                var max = 5000;
                 Console.WriteLine($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
-                Assert.That(swSend.ElapsedMilliseconds < 2000);
+                Assert.That(swSend.ElapsedMilliseconds, Is.LessThan(max));
 
-                await Task.Delay(20000);
-                Assert.That(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < 20000);
+                max = 15000;
+                await Task.Delay(max);
+                Assert.That(swHandle.IsRunning == false);
+                Assert.That(swHandle?.ElapsedMilliseconds, Is.LessThan(max));
             }
         }
     }

@@ -13,7 +13,6 @@ using System.Threading;
 
 namespace Rebus.Kafka.Dispatcher
 {
-
     /// <summary>
     /// Tracks which messages have already been processed and can be fixed and which need to be re-processed.
     /// </summary>
@@ -27,7 +26,7 @@ namespace Rebus.Kafka.Dispatcher
             if (_messageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
             {
 #if DEBUG
-                _log.Debug($"AppendMessage (Thread #{Thread.CurrentThread.ManagedThreadId}) message: {messageId}.{DicpatcherStateToStrting()}");
+                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} AppendMessage message: {messageId}.{DicpatcherStateToStrting()}");
 #endif
                 return Result.Ok();
             }
@@ -45,7 +44,7 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"Completing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Completing message: {messageId}.{DicpatcherStateToStrting()}");
 #endif
                     if (_messageInfos.Count >= _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
                     {
@@ -74,7 +73,7 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
 #endif                    
                     return Result.Ok();
                 }
@@ -94,7 +93,7 @@ namespace Rebus.Kafka.Dispatcher
                     {
                         reprocessMessage = reprocessMessageInfo.Value.Message;
 #if DEBUG
-                        _log.Debug($"TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
+                        _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
 #endif
                         return true;
                     }
@@ -134,7 +133,7 @@ namespace Rebus.Kafka.Dispatcher
             if (tpos.Count > 0)
             {
 #if DEBUG
-                _log.Debug($"TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
+                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
 #endif
                 return true;
             }

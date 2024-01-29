@@ -9,7 +9,7 @@
 So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the appropriate version of the package "librdkafka.redist". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use Rebus.Kafka for the first time as follows: "Confluent.Kafka.Library.Load (pathToLibrdkafka)".</Description>
     <PackageTags>messaging, rebus, queue, service, bus, Kafka, Confluent, librdkafka</PackageTags>
     <Company />
-    <Version>3.3.1</Version>
+    <Version>3.3.2</Version>
     <PackageLicenseUrl>https://raw.githubusercontent.com/rebus-org/Rebus/master/LICENSE.md</PackageLicenseUrl>
     <PackageProjectUrl>https://github.com/glazkovalex/Rebus.Kafka</PackageProjectUrl>
     <PackageIconUrl>https://raw.githubusercontent.com/glazkovalex/Rebus.Kafka/master/image.png</PackageIconUrl>

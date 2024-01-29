@@ -17,7 +17,7 @@ namespace Rebus.Kafka.Tests.ErrorHandling
         /// <inheritdoc />
         public async Task Handle(RetriesMessage evnt)
         {
-            ErrorHandlingTests.Counter.Add(evnt.MessageNumber);
+            ErrorHandlingTests.Counter.Add(evnt);
             _output.WriteLine($"RetriesMessageHandler received : \"{evnt.MessageNumber}\". Amount = {ErrorHandlingTests.Counter.Amount}");
             if (evnt.MessageNumber == 2)
             {
@@ -35,7 +35,7 @@ namespace Rebus.Kafka.Tests.ErrorHandling
             _output.WriteLine($"RetriesMessageHandler deferCount:{deferCount} processing IFailed<RetriesMessage> : \"{failedMessage.Message.MessageNumber}\"");
             _output.WriteLine($"ErrorDescription: {failedMessage.ErrorDescription}");
             _output.WriteLine($"Exceptions: {JsonSerializer.Serialize(failedMessage.Exceptions, new JsonSerializerOptions { WriteIndented = true })}");
-            ErrorHandlingTests.Counter.Add(failedMessage.Message.MessageNumber);
+            ErrorHandlingTests.Counter.Add(failedMessage.Message);
             
             const int maxDeferCount = 2;
             if (deferCount >= maxDeferCount)
