@@ -16,6 +16,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -115,6 +116,7 @@ namespace Rebus.Kafka.Tests
         {
             // Given
             const string topic = "sample";
+            await new KafkaAdmin(BootstrapServer).CreateTopicsAsync(new TopicSpecification { Name = topic, ReplicationFactor = 1, NumPartitions = 1 });
 
             var producerConfig = new ProducerConfig();
             producerConfig.BootstrapServers = BootstrapServer;
@@ -124,26 +126,7 @@ namespace Rebus.Kafka.Tests
             consumerConfig.GroupId = "sample-consumer";
             consumerConfig.AutoOffsetReset = AutoOffsetReset.Earliest;
 
-            var message = new Message<string, string>();
-            message.Value = Guid.NewGuid().ToString("D");
-
-            // When
-            using (var adminClient = new AdminClientBuilder(new AdminClientConfig { BootstrapServers = BootstrapServer }).Build())
-            {
-                try
-                {
-                    await adminClient.CreateTopicsAsync(new TopicSpecification[]
-                    {
-                        new TopicSpecification { Name = topic, ReplicationFactor = 1, NumPartitions = 1 }
-                    }, new CreateTopicsOptions { ValidateOnly = false });
-                    var topicMetadata = adminClient.GetMetadata(topic, TimeSpan.FromSeconds(10)).Topics.FirstOrDefault(t => t.Topic == topic);
-                }
-                catch (CreateTopicsException e)
-                {
-                    Logger.LogError($"An error occurred creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
-                    throw;
-                }
-            }
+            var message = new Message<string, string>() { Value = Guid.NewGuid().ToString("D") };
 
             ConsumeResult<string, string> result;
             using (var consumer = new ConsumerBuilder<string, string>(consumerConfig).Build())
@@ -238,7 +221,7 @@ namespace Rebus.Kafka.Tests
                 await Task.WhenAll(messages);
                 await Task.Delay(10000);
 
-                Assert.Equal(sendAmount, MessageHandler.Counter.Amount + SecondMessageHandler.Counter.Amount );
+                Assert.Equal(sendAmount, MessageHandler.Counter.Amount + SecondMessageHandler.Counter.Amount);
             }
         }
 
@@ -393,10 +376,10 @@ namespace Rebus.Kafka.Tests
             string topic = "Performance";
             int perfomanceCount = 10000;
             CancellationTokenSource cts = new CancellationTokenSource();
-            var producerLogger = new TestLogger<KafkaProducer<Null, string>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaProducer<Null, string>>());
-            using (var producer = new KafkaProducer<Null, string>(BootstrapServer, producerLogger))
+            var producerLogger = new TestLogger<KafkaProducer<string, byte[]>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaProducer<string, byte[]>>());
+            using (var producer = new KafkaProducer<string, byte[]>(BootstrapServer, producerLogger))
             {
-                var consumerLogger = new TestLogger<KafkaConsumer<Null, string>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaConsumer<Null, string>>());
+                var consumerLogger = new TestLogger<KafkaConsumer<string, byte[]>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaConsumer<string, byte[]>>());
                 Stopwatch swHandle = null;
                 var consumerConfig = new ConsumerAndBehaviorConfig
                 {
@@ -406,17 +389,17 @@ namespace Rebus.Kafka.Tests
                     GroupId = "temp",
                     AutoOffsetReset = AutoOffsetReset.Earliest,
                 };
-                using (KafkaConsumer<Null, string> consumer = new KafkaConsumer<Null, string>(consumerConfig, consumerLogger))
+                using (KafkaConsumer<string, byte[]> consumer = new KafkaConsumer<string, byte[]>(consumerConfig, consumerLogger))
                 {
                     int messageCount = 0;
                     var sendAmount = 0;
-                    var obs = consumer.Consume(new[] { topic });
+                    var obs = consumer.Consume(topic);
                     obs.Subscribe(consumeResult =>
                     {
                         swHandle ??= Stopwatch.StartNew();
                         if (consumeResult.Offset % consumerConfig.BehaviorConfig.CommitPeriod == 0)
                         {
-                            consumer.Commit(consumeResult.TopicPartitionOffset);
+                            consumer.CommitIncrementedOffset(consumeResult.TopicPartitionOffset);
                         }
                         var message = JsonSerializer.Deserialize<Message>(consumeResult.Message.Value);
                         sendAmount -= message.MessageNumber;
@@ -430,11 +413,33 @@ namespace Rebus.Kafka.Tests
                     }, cts.Token);
                     await Task.Delay(1000);
 
-                    var messages = Enumerable.Range(1, perfomanceCount);
-                    sendAmount = messages.Sum();
+                    var headerDictionary = new Dictionary<string, string>
+                    {
+                        { "rbs2-intent", "pub"},
+                        { "rbs2-msg-id", "489b6782-ef89-47f4-8c57-b9432a8dff6d"},
+                        { "rbs2-return-address", "IdempotentSaga.queue" },
+                        { "rbs2-senttime", "2024-01-30T13:29:35.6222389\u002B03:00" },
+                        { "rbs2-sender-address", "IdempotentSaga.queue" },
+                        { "rbs2-msg-type", "IdempotentSaga.Messages.SagaMessageFire, IdempotentSaga" },
+                        { "rbs2-corr-id", "0fd126ec-7385-413e-9080-3247bcebd2cb" },
+                        { "rbs2-corr-seq", "3" },
+                        { "rbs2-content-type", "application/json;charset=utf-8"}
+                    };
                     Stopwatch swSend = Stopwatch.StartNew();
-                    var jobs = messages.Select(i => new Message<Null, string> { Value = JsonSerializer.Serialize(new Message { MessageNumber = i }) })
-                        .Select(m => producer.ProduceAsync(topic, m));
+                    var jobs = new List<Task<DeliveryResult<string, byte[]>>>();
+                    for (var i = 1; i <= perfomanceCount; i++)
+                    {
+                        var utf8 = new UTF8Encoding();
+                        var body = utf8.GetBytes(JsonSerializer.Serialize(new Message { MessageNumber = i }));
+                        var headers = new Headers();
+                        foreach (var header in headerDictionary)
+                        {
+                            headers.Add(header.Key, utf8.GetBytes(header.Value));
+                        }
+                        var message = new Message<string, byte[]> { Value = body, Headers = headers };
+                        jobs.Add(producer.ProduceAsync(topic, message));
+                        Interlocked.Add(ref sendAmount, i);
+                    }
                     await Task.WhenAll(jobs);
                     swSend.Stop();
                     Output.WriteLine($"Confluent send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}с");
@@ -446,6 +451,63 @@ namespace Rebus.Kafka.Tests
                     Assert.True(swHandle.IsRunning == false && swHandle?.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
                     Assert.Equal(0, sendAmount);
                 }
+            }
+        }
+
+        [Fact]
+        public async Task KafkaConsumerSeekToCustomOffset()
+        {
+            string topic = "SeekToCustomOffset";
+            int sendCount = 500;
+            long startOffset = 200, stopOffset = 209;
+            var sendAmount = 0;
+            CancellationTokenSource cts = new CancellationTokenSource();
+            var producerLogger = new TestLogger<KafkaProducer<string, byte[]>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Info }.GetLogger<KafkaProducer<string, byte[]>>());
+            using (var producer = new KafkaProducer<string, byte[]>(BootstrapServer, producerLogger))
+            {
+                var jobs = new List<Task<DeliveryResult<string, byte[]>>>();
+                for (var i = 1; i <= sendCount; i++)
+                {
+                    var body = new UTF8Encoding().GetBytes(JsonSerializer.Serialize(new Message { MessageNumber = i }));
+                    var message = new Message<string, byte[]> { Value = body };
+                    jobs.Add(producer.ProduceAsync(topic, message));
+                    Interlocked.Add(ref sendAmount, i);
+                }
+                await Task.WhenAll(jobs);
+                Output.WriteLine($"Confluent send {sendCount} messages");
+                Assert.Equal((1 + sendCount) * sendCount / 2, sendAmount);
+            }
+            var consumerLogger = new TestLogger<KafkaConsumer<string, byte[]>>(new TestOutputLoggerFactory(Output) { MinLevel = Logging.LogLevel.Debug }.GetLogger<KafkaConsumer<string, byte[]>>());
+            var consumerConfig = new ConsumerAndBehaviorConfig
+            {
+                BootstrapServers = BootstrapServer,
+                AllowAutoCreateTopics = true,
+                GroupId = "temp",
+                AutoOffsetReset = AutoOffsetReset.Earliest,
+            };
+            using (KafkaConsumer<string, byte[]> consumer = new KafkaConsumer<string, byte[]>(consumerConfig, consumerLogger))
+            {
+                int messageCount = 0;
+                int amountFromStartToStop = 0;
+                var tpo = new TopicPartitionOffset(topic, new Partition(0), new Offset(startOffset));
+                IObservable<ConsumeResult<string, byte[]>> obs = consumer.Consume(tpo);
+                ConsumeResult<string, byte[]> lastConsumeResult = null;
+                obs.Subscribe(consumeResult =>
+                {
+                    lastConsumeResult = consumeResult;
+                    var message = JsonSerializer.Deserialize<Message>(consumeResult.Message.Value);
+                    Interlocked.Increment(ref messageCount);
+                    Interlocked.Add(ref amountFromStartToStop, message.MessageNumber);
+                    Output.WriteLine($"Confluent received {messageCount} messages with Value \"{message.MessageNumber}\"");
+                    if (consumeResult.Offset == stopOffset)
+                    {
+                        cts.Cancel();
+                    }
+                }, cts.Token);
+                await Task.Delay(3000);
+                consumer.CommitIncrementedOffset(lastConsumeResult.TopicPartitionOffset);
+                Assert.Equal(stopOffset - startOffset + 1, messageCount);
+                Assert.Equal((startOffset + stopOffset + 2) * messageCount / 2, amountFromStartToStop);
             }
         }
 

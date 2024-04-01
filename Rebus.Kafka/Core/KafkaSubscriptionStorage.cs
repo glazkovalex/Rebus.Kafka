@@ -131,7 +131,7 @@ namespace Rebus.Kafka.Core
                 .SetOffsetsCommittedHandler(ConsumerOnOffsetsCommittedHandler)
                 .Build();
 
-            _commitDispatcher.OnCanCommit(tpos => Commit(tpos));
+            _commitDispatcher.CanCommit += tpos => CommitIncrementedOffset(tpos);
 
             var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
             var tcs = new TaskCompletionSource<bool>();
@@ -219,7 +219,7 @@ namespace Rebus.Kafka.Core
                 throw new RebusApplicationException($"Failed to not confirm message processing. ({result.Reason})");
         }
 
-        Result Commit(IReadOnlyList<TopicPartitionOffset> tpos)
+        Result CommitIncrementedOffset(IReadOnlyList<TopicPartitionOffset> tpos)
         {
             try
             {
@@ -437,7 +437,7 @@ namespace Rebus.Kafka.Core
                 {
                     if (_commitDispatcher.TryGetOffsetsThatCanBeCommit(out var tpos))
                     {
-                        Commit(tpos);
+                        CommitIncrementedOffset(tpos);
                     }
                 }
                 catch (Exception) { /* ignored */ }

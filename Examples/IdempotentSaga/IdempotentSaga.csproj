@@ -10,7 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Rebus.PostgreSql" Version="9.0.1" />
-    <PackageReference Include="Rebus.ServiceProvider" Version="10.0.0" />
+    <PackageReference Include="Rebus.ServiceProvider" Version="10.1.2" />
   </ItemGroup>
 
   <ItemGroup>

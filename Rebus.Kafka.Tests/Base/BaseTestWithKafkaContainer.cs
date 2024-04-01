@@ -24,7 +24,7 @@ namespace Rebus.Kafka.Tests.Base
 
         public Task DisposeAsync()
         {
-            Logger.LogInformation("Dispose kafka container");
+            Logger.LogInformation("Dispose Kafka container");
             return _kafkaContainer.DisposeAsync().AsTask();
         }
         protected ITestOutputHelper Output;

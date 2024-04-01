@@ -19,7 +19,8 @@ namespace TwoBusInHost
             var host = CreateHostBuilder(args).Build();
             host.RunAsync();
             var busRegistry = host.Services.GetRequiredService<IBusRegistry>();
-            IBus busOneWay = busRegistry.GetBus("OneWayBus");
+            IBus defaultBus = host.Services.GetRequiredService<IBus>();
+            IBus oneWayBus = busRegistry.GetBus("OneWayBus");
             char key;
             do
             {
@@ -29,7 +30,7 @@ namespace TwoBusInHost
                     .Select(async i =>
                     {
                         Interlocked.Add(ref sendAmount, i);
-                        await busOneWay.Send(new TestMessage { MessageNumber = i });
+                        await oneWayBus.Send(new TestMessage { MessageNumber = i });
                     }).ToArray();
                 Task.WaitAll(messages);
                 Console.WriteLine($"Send: {sendAmount} for {sw.ElapsedMilliseconds / 1000f:N3}c");

@@ -1,4 +1,5 @@
 ﻿using Confluent.Kafka;
+using Newtonsoft.Json.Linq;
 using Rebus.Kafka.Configs;
 using Rebus.Kafka.Core;
 using Rebus.Kafka.Extensions;
@@ -48,9 +49,9 @@ namespace Rebus.Kafka.Dispatcher
 #endif
                     if (_messageInfos.Count >= _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
                     {
-                        if (CanCommit(tpos).Failure)
+                        if (OnCanCommit(tpos).Failure)
                         {
-                            var result = CanCommit(tpos);
+                            var result = OnCanCommit(tpos);
                             if (result.Failure)
                             {
                                 _log.Warn(result.Reason);
@@ -149,29 +150,13 @@ namespace Rebus.Kafka.Dispatcher
         /// <summary>
         /// The event occurs when the most senior message block has been successfully processed
         /// </summary>
-        /// <param name="commitAction"></param>
-        internal void OnCanCommit(Func<IReadOnlyList<TopicPartitionOffset>, Result> commitAction)
-        {
-            _onCanCommit += commitAction;
-        }
-        event Func<IReadOnlyList<TopicPartitionOffset>, Result> _onCanCommit;
+        protected internal event Func<IReadOnlyList<TopicPartitionOffset>, Result> CanCommit;
 
-        Result CanCommit(IReadOnlyList<TopicPartitionOffset> topicPartitionOffset)
+        Result OnCanCommit(IReadOnlyList<TopicPartitionOffset> topicPartitionOffset)
         {
-            if (_onCanCommit == null) 
-                return Result.Ok();
-
-            var delegates = _onCanCommit.GetInvocationList();
-            Result result;
-            for (var index = 0; index < delegates.Length; index++)
+            if (CanCommit != null)
             {
-                // they're always of this type, so no need to check the type here
-                var callback = (Func<IReadOnlyList<TopicPartitionOffset>, Result>)delegates[index];
-                result = callback(topicPartitionOffset);
-                if (result.Failure)
-                {
-                    return result;
-                }
+                return CanCommit.Invoke(topicPartitionOffset);
             }
             return Result.Ok();
         }

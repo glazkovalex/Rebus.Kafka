@@ -37,6 +37,16 @@ namespace Rebus.Kafka
         /// <returns>existing topic metadatas</returns>
         /// <exception cref="ArgumentException"></exception>
         /// <exception cref="CreateTopicsException"></exception>
+        public Task<IReadOnlyList<TopicMetadata>> CreateTopicsAsync(params TopicSpecification[] newTopicSpecifications)
+            => CreateTopicsAsync(newTopicSpecifications as IEnumerable<TopicSpecification>);
+
+        /// <summary>
+        /// Try to create topics if there are none
+        /// </summary>
+        /// <param name="newTopicSpecifications">new topic specifications</param>
+        /// <returns>existing topic metadatas</returns>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="CreateTopicsException"></exception>
         public async Task<IReadOnlyList<TopicMetadata>> CreateTopicsAsync(IEnumerable<TopicSpecification> newTopicSpecifications)
         {
             if (string.IsNullOrEmpty(_bootstrapServers))
@@ -131,9 +141,9 @@ namespace Rebus.Kafka
         }
 
         private string _bootstrapServers;
-        ILogger<KafkaAdmin> _log;
+        ILogger _log;
 
-        public KafkaAdmin(string bootstrapServers, ILogger<KafkaAdmin> log = null)
+        public KafkaAdmin(string bootstrapServers, ILogger log = null)
         {
             if (string.IsNullOrEmpty(bootstrapServers))
                 throw new ArgumentException("BootstrapServers it shouldn't be null!");

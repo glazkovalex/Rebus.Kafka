@@ -1,7 +1,6 @@
 ﻿using Rebus.Kafka.NTests.Implementations;
 using Rebus.Tests.Contracts.Transports;
 using Rebus.Transport;
-using System.Dynamic;
 using System.Reflection;
 
 namespace Rebus.Kafka.NTests.Transports
@@ -22,12 +21,6 @@ namespace Rebus.Kafka.NTests.Transports
         [Test]
         public async Task EmptyQueueReturnsNull_()
         {
-            dynamic param = new ExpandoObject();
-            param.Id = 12;
-            param.Name = "Djon";
-            param.Date = DateTime.UtcNow;
-            string json = System.Text.Json.JsonSerializer.Serialize(param);
-
             var emptyQueue = _factory.Create(Rebus.Tests.Contracts.TestConfig.GetName("empty"));
             MethodInfo dynMethod = typeof(BasicSendReceive<KafkaTransportFactory>).GetMethod("WithContext", BindingFlags.NonPublic | BindingFlags.Static);
             Func<ITransactionContext, Task> func = async (context) =>

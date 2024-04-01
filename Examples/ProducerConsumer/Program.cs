@@ -31,16 +31,17 @@ namespace ProducerConsumer
             using (KafkaConsumer<Null, string> consumer = new KafkaConsumer<Null, string>(_kafkaEndpoint, loggerConsumer)
                 , consumer2 = new KafkaConsumer<Null, string>(_kafkaEndpoint, loggerConsumer))
             {
-                consumer.Consume(new[] { bTopicNameResp })
+                consumer.Consume(bTopicNameResp)
                     .Subscribe(result =>
                     {
                         Console.WriteLine($"Boy name {result.Message.Value} is recommended. (test-header:{(result.Message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})");
-                        consumer.Commit(result.TopicPartitionOffset);
+                        consumer.CommitIncrementedOffset(result.TopicPartitionOffset);
                     }, cts.Token);
-                consumer2.Consume(new[] { gTopicNameResp })
-                    .Subscribe(result => {
+                consumer2.Consume(gTopicNameResp)
+                    .Subscribe(result =>
+                    {
                         Console.WriteLine($"Girl name {result.Message.Value} is recommended. (test-header:{(result.Message.Headers.TryGetLastBytes("test-header", out byte[] data) ? data[0].ToString() : "null")})");
-                        consumer2.Commit(result.TopicPartitionOffset);
+                        consumer2.CommitIncrementedOffset(result.TopicPartitionOffset);
                     }, cts.Token);
 
                 string userInput;
