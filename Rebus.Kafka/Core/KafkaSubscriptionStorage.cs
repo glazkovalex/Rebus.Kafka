@@ -40,13 +40,13 @@ namespace Rebus.Kafka.Core
                     }
                     catch (OperationCanceledException e)
                     {
-                        _log?.Warn($"Consume warning: {e.Message}");
+                        _log?.Warn("Consume warning: {exception}", e);
                         resume = false;
                         consumeResult = null;
                     }
                     catch (ConsumeException e)
                     {
-                        _log?.Error($"Consume error: {e.Error}");
+                        _log?.Error("Consume error: {error}", e.Error);
                     }
                 } while (resume);
 
@@ -178,18 +178,20 @@ namespace Rebus.Kafka.Core
                             }
                             else
                             {
-                                _log.Warn($"The consumer configuration specifies \"AllowAutoCreateTopics = true\", so topics were automatically created: {string.Join(",", missingTopics)}!\nIt is better that the topics are not created by the bus.");
+                                _log.Warn("The consumer configuration specifies \"AllowAutoCreateTopics = true\", so topics were automatically created: {topics}!\nIt is better that the topics are not created by the bus.",
+                                          string.Join(",", missingTopics));
                             }
                         }
                         catch (CreateTopicsException e)
                         {
-                            _log.Error($"An error occured creating topic {e.Results[0].Topic}: {e.Results[0].Error.Reason}");
+                            _log.Error("An error occured creating topic {topic}: {error}", e.Results[0].Topic, e.Results[0].Error);
                             throw;
                         }
                     }
                     else
                     {
-                        _log.Warn($"There are not enough topics: {string.Join(",", missingTopics)}. Create them using the built-in tools. If you enable \"Allow Auto Create Topics = true\" in the consumer configuration, then the bus transport will create these topics automatically, but this is NOT recommended in production!");
+                        _log.Warn("There are not enough topics: {topics}. Create them using the built-in tools. If you enable \"Allow Auto Create Topics = true\" in the consumer configuration, then the bus transport will create these topics automatically, but this is NOT recommended in production!",
+                                  string.Join(",", missingTopics));
                     }
                 }
             }
@@ -242,16 +244,19 @@ namespace Rebus.Kafka.Core
         private void ConsumerOnLogHandler(IConsumer<string, byte[]> sender, LogMessage logMessage)
         {
             if (!logMessage.Message.Contains("MessageSet size 0, error \"Success\""))//Чтобы не видеть сообщений о пустых чтениях
-                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Consuming from Kafka. Client: '{logMessage.Name}', message: '{logMessage.Message}'.");
+                _log.Debug("Thread #{threadId} Consuming from Kafka. Client: '{clientName}', message: '{message}'.",
+                           Thread.CurrentThread.ManagedThreadId, logMessage.Name, logMessage.Message);
         }
 
         private void ConsumerOnStatisticsHandler(IConsumer<string, byte[]> sender, string json)
-            => _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Consumer statistics: {json}");
+            => _log.Info("Thread #{threadId} Consumer statistics: {json}",
+                         Thread.CurrentThread.ManagedThreadId, json);
 
         private void ConsumerOnErrorHandler(IConsumer<string, byte[]> sender, Error error)
         {
             if (!error.IsFatal)
-                _log.Warn($"Thread #{Thread.CurrentThread.ManagedThreadId} Consumer error: {error}. No action required.");
+                _log.Warn("Thread #{threadId} Consumer error: {error}. No action required.",
+                          Thread.CurrentThread.ManagedThreadId, error);
             else
             {
                 var values = sender.Assignment;
@@ -268,7 +273,8 @@ namespace Rebus.Kafka.Core
 
         private void ConsumerOnPartitionsAssignedHandler(IConsumer<string, byte[]> sender, List<TopicPartition> partitions)
         {
-            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Assigned partitions: \n\t{string.Join("\n\t", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug("Thread #{threadId} Assigned partitions: \n\t{partitions}]",
+                       Thread.CurrentThread.ManagedThreadId, string.Join("\n\t", partitions.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}")));
             if (_waitAssigned.Count > 0)
             {
                 var topics = partitions.Select(p => p.Topic).Distinct();
@@ -276,7 +282,7 @@ namespace Rebus.Kafka.Core
                 foreach (var key in keys)
                 {
                     _waitAssigned.TryRemove(key, out var task);
-                    _log.Info($"Subscribe on \"{task.Key}\"");
+                    _log.Info("Subscribe on \"{topic}\"", task.Key);
                     Task.Run(() => task.Value.SetResult(true));
                 }
             }
@@ -286,7 +292,8 @@ namespace Rebus.Kafka.Core
 
         private void ConsumerOnPartitionsRevokedHandler(IConsumer<string, byte[]> sender, List<TopicPartitionOffset> partitionOffsets)
         {
-            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Revoked partitions: \n\t{string.Join("\n\t", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}"))}]");
+            _log.Debug("Thread #{threadId} Revoked partitions: \n\t{partitions}]",
+                       Thread.CurrentThread.ManagedThreadId, string.Join("\n\t", partitionOffsets.Select(p => $"Topic:\"{p.Topic}\" Partition:{p.Partition.Value}")));
             if (_waitRevoked.Count > 0)
             {
                 var topics = partitionOffsets.Select(p => p.Topic).Distinct();
@@ -294,7 +301,7 @@ namespace Rebus.Kafka.Core
                 foreach (var key in keys)
                 {
                     _waitRevoked.TryRemove(key, out var task);
-                    _log.Info($"Unsubscribe from \"{task.Key}\"");
+                    _log.Info("Unsubscribe from \"{topic}\"", task.Key);
                     Task.Run(() => task.Value.SetResult(true));
                 }
             }
@@ -304,13 +311,15 @@ namespace Rebus.Kafka.Core
         private void ConsumerOnPartitionsLostHandler(IConsumer<string, byte[]> consumer, List<TopicPartitionOffset> topicPartitionOffsets)
         {
             var tpoView = topicPartitionOffsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
-            _log.Warn($"Thread #{Thread.CurrentThread.ManagedThreadId} Partitions lost: \n\t{string.Join("\n\t", tpoView)}");
+            _log.Warn("Thread #{threadId} Partitions lost: \n\t{partitions}",
+                      Thread.CurrentThread.ManagedThreadId, string.Join("\n\t", tpoView));
         }
 
         private void ConsumerOnOffsetsCommittedHandler(IConsumer<string, byte[]> consumer, CommittedOffsets committedOffsets)
         {
             var tpoView = committedOffsets.Offsets.Select(t => $"Topic: {t.Topic}, Partition: {t.Partition}, Offset: {t.Offset}");
-            _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Offsets committed: \n\t{string.Join("\n\t", tpoView)}");
+            _log.Debug("Thread #{threadId} Offsets committed: \n\t{partitions}",
+                        Thread.CurrentThread.ManagedThreadId, string.Join("\n\t", tpoView));
         }
 
         #endregion
@@ -442,7 +451,8 @@ namespace Rebus.Kafka.Core
                 }
                 catch (Exception) { /* ignored */ }
                 _consumer?.Close();
-                _log.Info($"Closed consumer BootstrapServers:{_config.BootstrapServers}, gropId: {_config.GroupId}.");
+                _log.Info("Closed consumer BootstrapServers:{bootstrapServers}, gropId: {groupId}.",
+                          _config.BootstrapServers, _config.GroupId);
                 _consumer?.Dispose();
             }
             isDisposed = true;
