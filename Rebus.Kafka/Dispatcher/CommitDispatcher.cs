@@ -27,13 +27,14 @@ namespace Rebus.Kafka.Dispatcher
             if (_messageInfos.TryAdd(messageId, new ProcessedMessage(topicPartitionOffset, MessageProcessingStatuses.Processing)))
             {
 #if DEBUG
-                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} AppendMessage message: {messageId}.{DicpatcherStateToStrting()}");
+                _log.Debug("Thread #{threadId} AppendMessage message: {messageId}.{dispatcherState}",
+                           Thread.CurrentThread.ManagedThreadId, messageId, DispatcherStateToStrting());
 #endif
                 return Result.Ok();
             }
             else
             {
-                return Result.Fail($"Already exist {messageId} in {DicpatcherStateToStrting()}");
+                return Result.Fail($"Already exist {messageId} in {DispatcherStateToStrting()}");
             }
         }
 
@@ -45,7 +46,8 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, new ProcessedMessage(oldProcessedMessage.TopicPartitionOffset, MessageProcessingStatuses.Completed), oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Completing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug("Thread #{threadId} Completing message: {messageId}.{dispatcherState}",
+                               Thread.CurrentThread.ManagedThreadId, messageId, DispatcherStateToStrting());
 #endif
                     if (_messageInfos.Count >= _behaviorConfig.CommitPeriod && TryGetOffsetsThatCanBeCommit(out var tpos))
                     {
@@ -74,12 +76,13 @@ namespace Rebus.Kafka.Dispatcher
                 if (_messageInfos.TryUpdate(messageId, newProcessedMessage, oldProcessedMessage))
                 {
 #if DEBUG
-                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} Reprocessing message: {messageId}.{DicpatcherStateToStrting()}");
+                    _log.Debug("Thread #{threadId} Reprocessing message: {messageId}.{dispatcherState}",
+                               Thread.CurrentThread.ManagedThreadId, messageId, DispatcherStateToStrting());
 #endif                    
                     return Result.Ok();
                 }
             }
-            return Result.Fail($"No such message: {message.ToReadableText()}.{DicpatcherStateToStrting()}");
+            return Result.Fail($"No such message: {message.ToReadableText()}.{DispatcherStateToStrting()}");
         }
 
         internal bool TryConsumeMessageToRestarted(out TransportMessage reprocessMessage)
@@ -94,7 +97,8 @@ namespace Rebus.Kafka.Dispatcher
                     {
                         reprocessMessage = reprocessMessageInfo.Value.Message;
 #if DEBUG
-                        _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} TryConsumeMessageToRestarted message: {reprocessMessageInfo.Key}.{DicpatcherStateToStrting()}");
+                        _log.Debug("Thread #{threadId} TryConsumeMessageToRestarted message: {messageId}.{dispatcherState}",
+                                   Thread.CurrentThread.ManagedThreadId, reprocessMessageInfo.Key, DispatcherStateToStrting());
 #endif
                         return true;
                     }
@@ -134,14 +138,14 @@ namespace Rebus.Kafka.Dispatcher
             if (tpos.Count > 0)
             {
 #if DEBUG
-                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DicpatcherStateToStrting()}");
+                _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} TryCommitLastBlock offsets:\n\t{string.Join(",\n\t", tpos.Select(tpo => $"Topic:{tpo.Topic}, Partition:{tpo.Partition.Value}, Offset:{tpo.Offset.Value}"))}.{DispatcherStateToStrting()}");
 #endif
                 return true;
             }
             else
             {
                 //#if DEBUG
-                //                _log.Debug($"CommitDispatcher.TryCommitLastBlock there is nothing to commit.{DicpatcherStateToStrting()}");
+                //                _log.Debug($"CommitDispatcher.TryCommitLastBlock there is nothing to commit.{dispatcherStateToStrting()}");
                 //#endif
                 return false;
             }
@@ -172,7 +176,7 @@ namespace Rebus.Kafka.Dispatcher
             _behaviorConfig = behaviorConfig;
         }
 
-        private string DicpatcherStateToStrting()
+        private string DispatcherStateToStrting()
         {
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("\nMessage infos:");
