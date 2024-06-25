@@ -49,7 +49,8 @@ namespace Rebus.Kafka
                     {
                         const int waitSecont = 300; //5 minutes
                         int count = waitSecont * 10;
-                        _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Start waiting for the initialization to complete for {count / 600:N0} minutes...");
+                        _log.Info($"Thread #{{threadId}} Start waiting for the initialization to complete for {count / 600:N0} minutes...",
+                                  Thread.CurrentThread.ManagedThreadId);
                         while (_queueSubscriptionStorage?.IsInitialized == false)
                         {
                             Thread.Sleep(100);
@@ -60,7 +61,8 @@ namespace Rebus.Kafka
                                     + " Try pausing before sending the first message, or handling this exception in a"
                                     + " loop to wait for the consumer's subscription to your queue to complete.");
                         }
-                        _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} The transport initialization is complete.");
+                        _log.Info("Thread #{threadId} The transport initialization is complete.",
+                                  Thread.CurrentThread.ManagedThreadId);
                     }
             }
             await Task.WhenAll(outgoingMessages.GroupBy(m => new { m.DestinationAddress }).Select(async group =>
@@ -82,7 +84,8 @@ namespace Rebus.Kafka
                             throw new InvalidOperationException($"The message could not be sent. Try to resend the message: {outgoingMessage.TransportMessage.ToReadableText()}");
                         }
 #if DEBUG
-                        _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} the following message was sent to the topic \"{outgoingMessage.DestinationAddress}\" in t: {outgoingMessage.TransportMessage.ToReadableText()}");
+                        _log.Debug("Thread #{threadId} the following message was sent to the topic \"{topic}\" in t: {message}",
+                                   Thread.CurrentThread.ManagedThreadId, outgoingMessage.DestinationAddress, outgoingMessage.TransportMessage.ToReadableText());
 #endif
                     }
                     catch (Exception ex)
@@ -110,7 +113,8 @@ namespace Rebus.Kafka
                 context.OnAck(tc =>
                 {
 #if DEBUG
-                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} context.OnAck : {receivedMessage.ToReadableText()}");
+                    _log.Debug("Thread #{threadId} context.OnAck : {message}",
+                               Thread.CurrentThread.ManagedThreadId, receivedMessage.ToReadableText());
 #endif
                     _queueSubscriptionStorage.Ack(receivedMessage);
                     return Task.CompletedTask;
@@ -118,7 +122,8 @@ namespace Rebus.Kafka
                 context.OnNack(tc =>
                 {
 #if DEBUG
-                    _log.Debug($"Thread #{Thread.CurrentThread.ManagedThreadId} context.OnNack : {receivedMessage.ToReadableText()}");
+                    _log.Debug("Thread #{threadId} context.OnNack : {message}",
+                               Thread.CurrentThread.ManagedThreadId, receivedMessage.ToReadableText());
 #endif
                     _queueSubscriptionStorage.Nack(receivedMessage);
                     return Task.CompletedTask;
@@ -161,7 +166,8 @@ namespace Rebus.Kafka
         /// <summary>Initializes the transport by ensuring that the input queue has been created</summary>
         public void Initialize()
         {
-            _log.Info($"Thread #{Thread.CurrentThread.ManagedThreadId} Initializing Kafka transport with queue \"{Address}\"");
+            _log.Info("Thread #{threadId} Initializing Kafka transport with queue \"{queue}\"",
+                      Thread.CurrentThread.ManagedThreadId, Address);
             var builder = new ProducerBuilder<string, byte[]>(_producerConfig)
                 .SetKeySerializer(Serializers.Utf8)
                 .SetValueSerializer(Serializers.ByteArray)
@@ -178,9 +184,9 @@ namespace Rebus.Kafka
                 {
                     string directory = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetEntryAssembly().GetName().CodeBase.Substring(8));
                     var pathToLibrd = System.IO.Path.Combine(directory, $"librdkafka\\{(Environment.Is64BitOperatingSystem ? "x64" : "x86")}\\librdkafka.dll");
-                    _log.Info($"librdkafka is not loaded. Trying to load {pathToLibrd}");
+                    _log.Info("librdkafka is not loaded. Trying to load {pathToLibrd}", pathToLibrd);
                     Library.Load(pathToLibrd);
-                    _log.Info($"Using librdkafka version: {Library.Version}");
+                    _log.Info("Using librdkafka version: {version}", Library.Version);
                 }
                 _producer = builder.Build();
             }
