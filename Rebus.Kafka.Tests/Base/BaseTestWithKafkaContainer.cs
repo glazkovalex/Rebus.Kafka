@@ -13,7 +13,7 @@ namespace Rebus.Kafka.Tests.Base
     public abstract class BaseTestWithKafkaContainer : IAsyncLifetime
     {
         internal const string IMAGE_NAME = "confluentinc/cp-kafka:7.0.1";
-        protected readonly KafkaContainer _kafkaContainer = new KafkaBuilder().WithImage(IMAGE_NAME).Build();
+        protected readonly KafkaContainer _kafkaContainer;
 
         public async Task InitializeAsync()
         {
@@ -35,6 +35,10 @@ namespace Rebus.Kafka.Tests.Base
         {
             Output = output;
             Logger = XUnitLogger.CreateLogger<SimpleTests>(output);
+            _kafkaContainer = new KafkaBuilder()
+                .WithImage(IMAGE_NAME)
+                .WithLogger(Logger)
+                .Build();
         }
     }
 }
