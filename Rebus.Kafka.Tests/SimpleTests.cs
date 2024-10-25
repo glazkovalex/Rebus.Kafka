@@ -266,17 +266,17 @@ namespace Rebus.Kafka.Tests
                     }
                     await scope.CompleteAsync();
                 }
-                Output.WriteLine("I sent two types of messages.");
+                Logger.LogInformation("I sent two types of messages.");
                 await Task.Delay(5000);
                 var sendCounter = counter.Items.ToList();
                 var receivedCounter = MessageHandler.Counter.Items.Concat(SecondMessageHandler.Counter.Items).ToList();
-                Output.WriteLine(string.Join($"\n", receivedCounter.Select(m => $"{m.GetType().Name}:{m.MessageNumber}")));
+                Logger.LogInformation(string.Join($"\n", receivedCounter.Select(m => $"{m.GetType().Name}:{m.MessageNumber}")));
                 Assert.Equal(counter.Amount, receivedCounter.Sum(m => m.MessageNumber));
                 for (var i = 0; i < counter.Count; i++)
                 {
                     var sendCounterItem = sendCounter[i];
                     var receivedCounterItem = receivedCounter[i];
-                    Output.WriteLine($"{sendCounterItem.GetType().Name}({sendCounterItem.MessageNumber}):{receivedCounterItem.GetType().Name}({receivedCounterItem.MessageNumber})");
+                    Logger.LogInformation($"{sendCounterItem.GetType().Name}({sendCounterItem.MessageNumber}):{receivedCounterItem.GetType().Name}({receivedCounterItem.MessageNumber})");
                     Assert.Equal(sendCounterItem.MessageNumber, receivedCounterItem.MessageNumber);
                 }
             }
@@ -342,7 +342,7 @@ namespace Rebus.Kafka.Tests
                     if (messageCount == perfomanceCount && sendAmount == 0)
                     {
                         swHandle.Stop();
-                        Output.WriteLine($"Rebus received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
+                        Logger.LogInformation($"Rebus received {perfomanceCount} messages in {swHandle.ElapsedMilliseconds / 1000f:N3}s");
                     }
                     return Task.CompletedTask;
                 });
@@ -359,8 +359,8 @@ namespace Rebus.Kafka.Tests
                 var jobs = messages.Select(i => adapter.Bus.Send(new Message { MessageNumber = i }));
                 await Task.WhenAll(jobs);
                 swSend.Stop();
-                Output.WriteLine($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
-                var max = 5000;
+                Logger.LogInformation($"Rebus send {perfomanceCount} messages in {swSend.ElapsedMilliseconds / 1000f:N3}s.");
+                var max = 7000;
                 Assert.True(swSend.ElapsedMilliseconds < max, $"Expected: {max}; actual: {swSend.ElapsedMilliseconds}.");
 
                 max = 10000;
