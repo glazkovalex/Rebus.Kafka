@@ -59,6 +59,9 @@ if (!Library.IsLoaded)
 - Due to the features of Apache Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario will work very slowly. I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast.
 
 ### Log of important changes:
+#### V 4.0.0 (29.11.2024)
+1. Updated to .Net 9 and up to Rebus version 8.7.1, which supports .Net 9
+2. Deleted the legacy code and the extra dependency
 #### V 3.0.1 (12.01.2024)
 1. Refactoring for Rebus version 8 with the corresponding API change;
 2. Implemented RetryStrategy - [automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling). Confirmations of receipt of messages are now sent not after they are received, but only after successful processing of messages or sending them to the error topic; 
