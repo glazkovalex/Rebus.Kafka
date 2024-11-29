@@ -5,7 +5,6 @@ using Rebus.Sagas.Idempotent;
 using Rebus.Sagas;
 using IdempotentSaga.Messages;
 using Rebus.Logging;
-using Rebus.Messages;
 
 namespace IdempotentSaga.Handlers
 {

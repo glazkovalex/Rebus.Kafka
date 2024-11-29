@@ -1,5 +1,4 @@
 ﻿using Confluent.Kafka;
-using Newtonsoft.Json.Linq;
 using Rebus.Kafka.Configs;
 using Rebus.Kafka.Core;
 using Rebus.Kafka.Extensions;

@@ -131,16 +131,6 @@ namespace Rebus.Kafka
         /// Confluent.Kafka.TopicPartitionOffsetException.Results property of the exception.</exception>
         public List<TopicPartitionOffset> Commit() => _consumer.Commit();
 
-        /// <summary>Commits an offset based on the topic/partition/offset of a ConsumeResult.</summary>
-        /// <param name="topicPartitionOffsets">The topic/partition offsets to commit.</param>
-        /// <returns>The ConsumeResult instance used to determine the committed offset.</returns>
-        /// <exception cref="KafkaException">Thrown if the request failed.</exception>
-        /// <exception cref="TopicPartitionOffsetException">Thrown if any of the constituent results is in error.
-        /// The entire result (which may contain constituent results that are not in error) is available via the 
-        /// Confluent.Kafka.TopicPartitionOffsetException.Results property of the exception.</exception>
-        [Obsolete(nameof(CommitIncrementedOffset))]
-        public void Commit(params TopicPartitionOffset[] topicPartitionOffsets) => _consumer.Commit(topicPartitionOffsets);
-
         /// <summary>Commits an incremented offset based on the topic/partition/offset of a ConsumeResult.</summary>
         /// <remarks>Committing offset + 1!</remarks>
         /// <param name="topicPartitionOffsets">The topic/partition offsets to commit.</param>

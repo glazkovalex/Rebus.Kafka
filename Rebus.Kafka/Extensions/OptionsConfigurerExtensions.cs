@@ -7,20 +7,10 @@ using System.Linq;
 namespace Rebus.Kafka
 {
     /// <summary>
-    /// Extensions fot <see cref="OptionsConfigurer"/>
+    /// Extensions for <see cref="OptionsConfigurer"/>
     /// </summary>
     public static class OptionsConfigurerExtensions
     {
-        /// <summary>
-        /// Simplifies naming the topic of events to "---Topic---.&lt;Spacename&gt;.&lt;TypeName&gt;".
-        /// </summary>
-        /// <param name="configurer"></param>
-        [Obsolete("Using the " + nameof(UseAttributeOrTypeFullNameForTopicNames))]
-        public static void UseNamespaceAndTypeTopicNames(this OptionsConfigurer configurer)
-        {
-            configurer.Decorate<ITopicNameConvention>(c => new ShortTopicFullNameConvention());
-        }
-
         /// <summary>
         /// Simplifies naming the topic of events by Name from TopicAttribute(&lt;TopicName&gt;) or to "---Topic---.&lt;Spacename&gt;.&lt;TypeName&gt;".
         /// </summary>
@@ -28,11 +18,6 @@ namespace Rebus.Kafka
         public static void UseAttributeOrTypeFullNameForTopicNames(this OptionsConfigurer configurer)
         {
             configurer.Decorate<ITopicNameConvention>(c => new ShortTopicAttributeOrFullNameConvention());
-        }
-
-        class ShortTopicFullNameConvention : ITopicNameConvention
-        {
-            public string GetTopic(Type type) => type.FullName;
         }
 
         class ShortTopicAttributeOrFullNameConvention : ITopicNameConvention

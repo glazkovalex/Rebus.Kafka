@@ -90,12 +90,6 @@ namespace Rebus.Kafka.Core
             var toUnregister = _subscriptions.SelectMany(a => a.Value).ToArray();
             _subscriptions.TryRemove(topic, out _);
             var topics = _subscriptions.SelectMany(a => a.Value);
-            //try
-            //{
-            //    _consumer.Commit();
-            //}
-            //catch (Exception) { /* ignored */ }
-
             var tcs = new TaskCompletionSource<bool>();
             //CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
             _waitRevoked.TryAdd(toUnregister, new KeyValuePair<string, TaskCompletionSource<bool>>(topic, tcs));
