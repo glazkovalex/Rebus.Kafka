@@ -85,7 +85,7 @@ if (!Library.IsLoaded)
 
 ### ToDo:
 - Schema Registry support in Kafka: Avro, JSON and Protobuf
-- In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
+- Add the setting of the convention by which the Apache Kafka message key will be assigned. In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
 - Start the transport from user-defined offsets for topics and partitions.
 ---
 If you have any recommendations or comments, I will be glad to hear.
