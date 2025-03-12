@@ -64,7 +64,7 @@ if (!Library.IsLoaded)
 #### V 5.0.0 (10.03.2025)
 1. Now messages go to Apache Kafka with a "key", which is equal to the value of the "kafka-key" header, and in its absence to the "rbs2-msg-id" header. The values of these headers can be set globally by defining an interceptor, as is done in [this example](https://github.com/glazkovalex/Rebus.Kafka/blob/0b4782f9a8ba26cfddc5874ff75eea815a5ddc82/Examples/SchemaRegistry/Program.cs#L69). Note: the "kafka-key" service header is removed from the headers after being applied as the "key" of the message.
 2. Added Confluent Schema Registry support for messages with three serializers, enabled by one of the three extensions [UseSchemaRegistryJson](https://github.com/glazkovalex/Rebus.Kafka/blob/0b4782f9a8ba26cfddc5874ff75eea815a5ddc82/Examples/SchemaRegistry/Program.cs#L63).
-3. When support for Schema Registry is enabled, the rules for naming topics by [UseAttributeOrTypeFullNameForTopicNames](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L58) and the format of messages are changed, and a "value.schema.id" header is added to the messages.
+3. When support for Schema Registry is enabled, the rules for naming topics by [UseAttributeOrTypeFullNameForTopicNames](https://github.com/glazkovalex/Rebus.Kafka/blob/820e6f1625759d692fe8b7dd5dabcc1d82483f01/Rebus.Kafka/Extensions/SchemasRegisterRebusConfigurerExtension.cs#L37) and the format of messages are changed, and a "value.schema.id" header is added to the messages.
 
 #### V 4.0.0 (29.11.2024)
 1. Updated to .Net 9 and up to Rebus version 8.7.1, which supports .Net 9
