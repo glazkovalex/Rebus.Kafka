@@ -35,7 +35,6 @@ namespace Rebus.Kafka
                 .Options(oc =>
                 {
                     oc.UseAttributeOrTypeFullNameForTopicNames();
-                    oc.LogPipeline(verbose: true);
                     oc.Decorate<IPipeline>(c =>
                     {
                         var pipeline = c.Get<IPipeline>();
