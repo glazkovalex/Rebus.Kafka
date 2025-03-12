@@ -16,11 +16,12 @@ using Rebus.Kafka.Configs;
 using Confluent.Kafka.Admin;
 using Rebus.Exceptions;
 using Rebus.Kafka.Dispatcher;
+using Rebus.Kafka.SchemaRegistry;
 
 namespace Rebus.Kafka.Core
 {
     /// <summary>Implementation of Apache Kafka SubscriptionStorage</summary>
-    public class KafkaSubscriptionStorage : ISubscriptionStorage, IInitializable, IDisposable
+    internal class KafkaSubscriptionStorage : ISubscriptionStorage, IInitializable, IDisposable
     {
         /// <summary>
         /// Receives the next message (if any) from the transport's input queue <see cref="P:Rebus.Transport.ITransport.Address" />
@@ -53,7 +54,8 @@ namespace Rebus.Kafka.Core
                 if (consumeResult != null)
                 {
                     var headers = consumeResult.Message?.Headers.ToDictionary(k => k.Key,
-                    v => System.Text.Encoding.UTF8.GetString(v.GetValueBytes())) ?? new Dictionary<string, string>();
+                        v => System.Text.Encoding.UTF8.GetString(v.GetValueBytes())) ?? new Dictionary<string, string>();
+                    headers[KafkaHeaders.KafkaTopic] = consumeResult.Topic;
                     TransportMessage transportMessage = new TransportMessage(headers, consumeResult.Message?.Value ?? new byte[0]);
                     _commitDispatcher.AppendMessage(transportMessage, consumeResult.TopicPartitionOffset);
                     return Task.FromResult(transportMessage);
@@ -69,13 +71,13 @@ namespace Rebus.Kafka.Core
         /// <inheritdoc />
         public Task<IReadOnlyList<string>> GetSubscriberAddresses(string topic)
         {
-            return Task.FromResult((IReadOnlyList<string>)new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
+            return Task.FromResult((IReadOnlyList<string>)new[] { $"{Constants.MagicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
         }
 
         /// <inheritdoc />
         public Task RegisterSubscriber(string topic, string subscriberAddress)
         {
-            _subscriptions.TryAdd(topic, new[] { $"{_magicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
+            _subscriptions.TryAdd(topic, new[] { $"{Constants.MagicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
             var topics = _subscriptions.SelectMany(a => a.Value).ToArray();
             var tcs = new TaskCompletionSource<bool>();
             //CancellationTokenRegistration registration = _cancellationToken.Register(() => tcs.SetCanceled());
@@ -229,6 +231,11 @@ namespace Rebus.Kafka.Core
             }
         }
 
+        private string ReplaceInvalidTopicCharacter(string topic)
+        {
+            return _topicRegex.Replace(topic, "_");
+        }
+
         internal bool IsInitialized => _initializationTask?.IsCompleted == true;
         private Task _initializationTask;
         private CommitDispatcher _commitDispatcher;
@@ -318,12 +325,7 @@ namespace Rebus.Kafka.Core
 
         #endregion
 
-        #region Скучное
-
-        private string ReplaceInvalidTopicCharacter(string topic)
-        {
-            return _topicRegex.Replace(topic, "_");
-        }
+        #region Boring
 
         private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
         private IConsumer<string, byte[]> _consumer;
@@ -333,7 +335,6 @@ namespace Rebus.Kafka.Core
         readonly IAsyncTaskFactory _asyncTaskFactory;
 
         private readonly ConcurrentDictionary<string, string[]> _subscriptions = new ConcurrentDictionary<string, string[]>();
-        private readonly string _magicSubscriptionPrefix = "---Topic---.";
         private readonly Regex _topicRegex = new Regex("[^a-zA-Z0-9\\._\\-]+");
         readonly CancellationToken _cancellationToken;
 
@@ -352,8 +353,8 @@ namespace Rebus.Kafka.Core
             var maxNameLength = 249;
             if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
                 throw new ArgumentException("Invalid characters or length of a topic (file)", nameof(inputQueueName));
-            if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
-                throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
+            if (inputQueueName.StartsWith(Constants.MagicSubscriptionPrefix))
+                throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{Constants.MagicSubscriptionPrefix}'. ");
 
             _config = new ConsumerConfig
             {
@@ -392,8 +393,8 @@ namespace Rebus.Kafka.Core
             var maxNameLength = 249;
             if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
                 throw new ArgumentException("Invalid characters or length of a topic (file)", nameof(inputQueueName));
-            if (inputQueueName.StartsWith(_magicSubscriptionPrefix))
-                throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{_magicSubscriptionPrefix}'. ");
+            if (inputQueueName.StartsWith(Constants.MagicSubscriptionPrefix))
+                throw new ArgumentException($"Sorry, but the queue name '{inputQueueName}' cannot be used because it conflicts with Rebus' internally used 'magic subscription prefix': '{Constants.MagicSubscriptionPrefix}'. ");
 
             _rebusLoggerFactory = rebusLoggerFactory;
             _log = rebusLoggerFactory.GetLogger<KafkaSubscriptionStorage>();

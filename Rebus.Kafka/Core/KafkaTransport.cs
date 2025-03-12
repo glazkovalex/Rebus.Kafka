@@ -1,7 +1,6 @@
 ﻿using Confluent.Kafka;
 using Rebus.Bus;
 using Rebus.Exceptions;
-using Rebus.Kafka.Core;
 using Rebus.Logging;
 using Rebus.Messages;
 using Rebus.Subscriptions;
@@ -16,11 +15,12 @@ using Rebus.Kafka.Configs;
 using System.Collections.Generic;
 using Rebus.Kafka.Extensions;
 using System.Linq;
+using Rebus.Kafka.SchemaRegistry;
 
-namespace Rebus.Kafka
+namespace Rebus.Kafka.Core
 {
     /// <summary>Implementation of Apache Kafka Transport for Rebus</summary>
-    public class KafkaTransport : AbstractRebusTransport, IInitializable, IDisposable, ISubscriptionStorage
+    internal class KafkaTransport : AbstractRebusTransport, IInitializable, IDisposable, ISubscriptionStorage
     {
         /// <inheritdoc />
         public override void CreateQueue(string address)
@@ -30,7 +30,7 @@ namespace Rebus.Kafka
                 return;
             _queueSubscriptionStorage.CreateTopics(address);
         }
-        
+
         /// <summary>
         /// Sends all outgoing <see cref="TransportMessage"/> to the queue with the specified globally addressable name
         /// </summary>
@@ -73,11 +73,25 @@ namespace Rebus.Kafka
                     try
                     {
                         var headers = new Confluent.Kafka.Headers();
+                        string key = null;
                         foreach (var header in outgoingMessage.TransportMessage.Headers)
                         {
-                            headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                            if (header.Key == KafkaHeaders.KafkaKey)
+                            {
+                                key = header.Value;
+                            }
+                            else
+                            {
+                                headers.Add(header.Key, Encoding.UTF8.GetBytes(header.Value));
+                            }
                         }
-                        var message = new Message<string, byte[]> { Value = outgoingMessage.TransportMessage.Body, Headers = headers/*, Timestamp = new Timestamp(DateTime.UtcNow)*/ };
+                        var message = new Message<string, byte[]>
+                        {
+                            Key = key ?? outgoingMessage.TransportMessage.GetId(),
+                            Value = outgoingMessage.TransportMessage.Body,
+                            Headers = headers,
+                            //Timestamp = new Timestamp(DateTime.UtcNow)
+                        };
                         result = await _producer.ProduceAsync(outgoingMessage.DestinationAddress, message).ConfigureAwait(false);
                         if (result.Status == PersistenceStatus.NotPersisted)
                         {
@@ -87,6 +101,16 @@ namespace Rebus.Kafka
                         _log.Debug("Thread #{threadId} the following message was sent to the topic \"{topic}\" in t: {message}",
                                    Thread.CurrentThread.ManagedThreadId, outgoingMessage.DestinationAddress, outgoingMessage.TransportMessage.ToReadableText());
 #endif
+                    }
+                    catch (ProduceException<string, byte[]> ex)
+                    {
+                        _log?.Error(ex,
+                            "Error producing to Kafka. Topic/partition: '{topic}/{partition}'. Key: {key}; Value: {value}'.",
+                            outgoingMessage.DestinationAddress,
+                            ex?.DeliveryResult?.Partition.ToString() ?? "N/A",
+                            ex?.DeliveryResult?.Key ?? "N/A",
+                            ex?.DeliveryResult?.Value.ToString() ?? "N/A");
+                        throw;
                     }
                     catch (Exception ex)
                     {
@@ -141,7 +165,7 @@ namespace Rebus.Kafka
         /// <inheritdoc />
         Task<IReadOnlyList<string>> ISubscriptionStorage.GetSubscriberAddresses(string topic)
         {
-            return _queueSubscriptionStorage.GetSubscriberAddresses(topic);
+            return Task.FromResult((IReadOnlyList<string>)new[] { $"{Constants.MagicSubscriptionPrefix}{ReplaceInvalidTopicCharacter(topic)}" });
         }
 
         /// <inheritdoc />
@@ -194,6 +218,11 @@ namespace Rebus.Kafka
             _queueSubscriptionStorage?.Initialize();
         }
 
+        private string ReplaceInvalidTopicCharacter(string topic)
+        {
+            return _topicRegex.Replace(topic, "_");
+        }
+
         #region logging
 
         private void ProducerOnLog(IProducer<string, byte[]> sender, LogMessage logMessage)
@@ -208,12 +237,8 @@ namespace Rebus.Kafka
 
         #endregion
 
-        #region Скучное
+        #region Boring
 
-        private string ReplaceInvalidTopicCharacter(string topic)
-        {
-            return _topicRegex.Replace(topic, "_");
-        }
         /// <summary>For run repetitive background tasks</summary>
         readonly IAsyncTaskFactory _asyncTaskFactory;
         readonly ILog _log;
@@ -255,7 +280,7 @@ namespace Rebus.Kafka
                 if (inputQueueName.Length > maxNameLength && _topicRegex.IsMatch(inputQueueName))
                     throw new ArgumentException("Invalid characters or the length of the topic (file)", nameof(inputQueueName));
                 _queueSubscriptionStorage = new KafkaSubscriptionStorage(rebusLoggerFactory, asyncTaskFactory, brokerList, inputQueueName, groupId);
-            } 
+            }
 
             _log = rebusLoggerFactory.GetLogger<KafkaTransport>();
             _asyncTaskFactory = asyncTaskFactory ?? throw new ArgumentNullException(nameof(asyncTaskFactory));

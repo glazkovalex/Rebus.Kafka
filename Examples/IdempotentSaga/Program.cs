@@ -26,9 +26,9 @@ namespace IdempotentSaga
                 do
                 {
                     var message = new KickoffSagaMessages { SagaInstanceId = Guid.NewGuid() };
-                    await bus.Publish(message);
+                    await bus.Publish(message/*, KafkaHeader.Create(message, message.SagaInstanceId)*/);
                     Console.ForegroundColor = ConsoleColor.Blue; Console.WriteLine("Press 'r' to repeat or Ctrl+z to exit."); Console.ForegroundColor = ConsoleColor.Gray;
-                    key = Console.ReadKey().KeyChar; 
+                    key = Console.ReadKey().KeyChar;
                 } while (key == 'r' || key == 'к');
                 await host.StopAsync();
             }
@@ -69,7 +69,7 @@ namespace IdempotentSaga
 
         static int counter = 0;
         internal const int MessageCount = 1;
-        static readonly string kafkaEndpoint = "confluent-kafka:9092";
+        const string kafkaEndpoint = "confluent-kafka:9092";
         static readonly string connectionString = "Host=Ubuntu-PostgreSQL;Database=Rebus;Username=demo;Password=1;";
     }
 }

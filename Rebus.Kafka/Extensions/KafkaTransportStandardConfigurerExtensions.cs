@@ -6,11 +6,12 @@ using Rebus.Threading;
 using Rebus.Transport;
 using System;
 using Rebus.Kafka.Configs;
+using Rebus.Kafka.Core;
 
 namespace Rebus.Kafka
 {
-	/// <summary>The Options of the Kafka transport</summary>
-	public static class KafkaTransportOptions
+    /// <summary>The Options of the Kafka transport</summary>
+    public static class KafkaTransportStandardConfigurerExtensions
 	{
 		// Based on: https://github.com/rebus-org/Rebus.AzureServiceBus/blob/master/Rebus.AzureServiceBus/Config/AzureServiceBusConfigurationExtensions.cs
 		const string AsbSubStorageText = "The Kafka transport was inserted as the subscriptions storage because it has native support for pub/sub messaging";
@@ -25,8 +26,7 @@ namespace Rebus.Kafka
 			string brokerList, string inputQueueName, string groupId = null)
 		{
 			// Register implementation of the transport as ISubscriptionStorage as well
-			configurer
-				.OtherService<KafkaTransport>()
+			configurer.OtherService<KafkaTransport>()
 				.Register(c =>
 				{
 					if (string.IsNullOrEmpty(inputQueueName))
@@ -42,8 +42,7 @@ namespace Rebus.Kafka
 			configurer.Register(c => c.Get<KafkaTransport>());
 
 			// Link the ISubscriberStorage to the transport
-			configurer
-				.OtherService<ISubscriptionStorage>()
+			configurer.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 		}
 
@@ -68,8 +67,7 @@ namespace Rebus.Kafka
 			string brokerList, string inputQueueName, ProducerConfig producerConfig, ConsumerConfig consumerConfig)
 		{
 			// Register implementation of the transport as ISubscriptionStorage as well
-			configurer
-				.OtherService<KafkaTransport>()
+			configurer.OtherService<KafkaTransport>()
 				.Register(c =>
 				{
 					if (string.IsNullOrEmpty(inputQueueName))
@@ -85,8 +83,7 @@ namespace Rebus.Kafka
 			configurer.Register(c => c.Get<KafkaTransport>());
 
 			// Link the ISubscriberStorage to the transport
-			configurer
-				.OtherService<ISubscriptionStorage>()
+			configurer.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 		}
 
@@ -111,8 +108,7 @@ namespace Rebus.Kafka
 			string brokerList, string inputQueueName, ProducerConfig producerConfig, ConsumerAndBehaviorConfig consumerAndBehaviorConfig)
 		{
 			// Register implementation of the transport as ISubscriptionStorage as well
-			configurer
-				.OtherService<KafkaTransport>()
+			configurer.OtherService<KafkaTransport>()
 				.Register(c =>
 				{
 					if (string.IsNullOrEmpty(inputQueueName))
@@ -128,8 +124,7 @@ namespace Rebus.Kafka
 			configurer.Register(c => c.Get<KafkaTransport>());
 
 			// Link the ISubscriberStorage to the transport
-			configurer
-				.OtherService<ISubscriptionStorage>()
+			configurer.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 		}
 
@@ -140,8 +135,7 @@ namespace Rebus.Kafka
 		public static void UseKafkaAsOneWayClient(this StandardConfigurer<ITransport> configurer, string brokerList)
 		{
 			// Register implementation of the transport as ISubscriptionStorage as well
-			configurer
-				.OtherService<KafkaTransport>()
+			configurer.OtherService<KafkaTransport>()
 				.Register(c =>
 				{
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
@@ -153,8 +147,7 @@ namespace Rebus.Kafka
 			configurer.Register(c => c.Get<KafkaTransport>());
 
 			// Link the ISubscriberStorage to the transport
-			configurer
-				.OtherService<ISubscriptionStorage>()
+			configurer.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 
 			OneWayClientBackdoor.ConfigureOneWayClient(configurer);
@@ -174,8 +167,7 @@ namespace Rebus.Kafka
 			string brokerList, ProducerConfig producerConfig)
 		{
 			// Register implementation of the transport as ISubscriptionStorage as well
-			configurer
-				.OtherService<KafkaTransport>()
+			configurer.OtherService<KafkaTransport>()
 				.Register(c =>
 				{
 					var rebusLoggerFactory = c.Get<IRebusLoggerFactory>();
@@ -187,8 +179,7 @@ namespace Rebus.Kafka
 			configurer.Register(c => c.Get<KafkaTransport>());
 
 			// Link the ISubscriberStorage to the transport
-			configurer
-				.OtherService<ISubscriptionStorage>()
+			configurer.OtherService<ISubscriptionStorage>()
 				.Register(c => c.Get<KafkaTransport>(), description: AsbSubStorageText);
 			
 			OneWayClientBackdoor.ConfigureOneWayClient(configurer);

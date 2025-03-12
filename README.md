@@ -47,6 +47,8 @@ Many others are probably supported too, but I haven't checked.
 * [UseAttributeOrTypeFullNameForTopicNames](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L58) simplifies naming the topic of events by Name from [TopicAttribute({TopicName})](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Messages/KickoffSagaMessages.cs#L5) or to "---Topic---.{Spacename}.{TypeName}".
 * [KafkaAdmin](https://github.com/glazkovalex/Rebus.Kafka/blob/master/Rebus.Kafka/KafkaAdmin.cs) which allows you to programmatically create a topic with many partitions and delete topics.
 * In multithreaded message processing, the order in which messages are processed may differ from the order of messages in the queue. If the order is very important, then use single-threaded processing: `.Options(o => o.SetMaxParallelism(1))`
+* Now messages go to Apache Kafka with a "key", which is equal to the value of the "kafka-key" header, and in its absence to the "rbs2-msg-id" header. The values of these attributes can be set globally by defining an interceptor, as is done in [this example](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L55). This useful for partitioning. Note: the "kafka-key" service header is removed from the headers after being applied as the "key" of the message.
+* **Confluent Schema Registry** support for messages with three serializers, enabled by one of the three extensions [UseSchemaRegistryJson](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L59). Note: when auto-creating topics, event topics work correctly immediately, and message **queues** are automatically created with the "confluent.value.subject.name.strategy" equal to "io.confluent.kafka.serializer.subject.TopicNameStrategy" therefore, they must be manually changed to "io.confluent.kafka.serializers.subject.**Record**NameStrategy"!
  
 ### Note: 
 - So as to interact with the Apache Kafka requires the unmanaged "librdkafka", you need to install the appropriate version of the package "[librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist)". If this unmanaged "librdkafka" is not found automatically, you must load it before you can use [Rebus.Kafka](https://github.com/glazkovalex/Rebus.Kafka) for the first time as follows:
@@ -59,9 +61,15 @@ if (!Library.IsLoaded)
 - Due to the features of Apache Kafka, after subscribing or unsubscribing to messages for some time while there is **very slowly rebalancing** of clients in groups, lasting several seconds or more. therefore, you should avoid the scenario of dynamic subscription to a single reply message, sending a single message to the recipient, and unsubscribing from the message after receiving a single reply. Since this scenario will work very slowly. I recommend that you subscribe to all your messages only when the application starts and that you do not change subscribers in runtime, then the work of transport will be fast.
 
 ### Log of important changes:
+#### V 5.0.0 (10.03.2025)
+1. Now messages go to Apache Kafka with a "key", which is equal to the value of the "kafka-key" header, and in its absence to the "rbs2-msg-id" header. The values of these headers can be set globally by defining an interceptor, as is done in [this example](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L55). Note: the "kafka-key" service header is removed from the headers after being applied as the "key" of the message.
+2. Added Confluent Schema Registry support for messages with three serializers, enabled by one of the three extensions [UseSchemaRegistryJson](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L59).
+3. When support for Schema Registry is enabled, the rules for naming topics by [UseAttributeOrTypeFullNameForTopicNames](https://github.com/glazkovalex/Rebus.Kafka/blob/e292ac48d9049785123bb2ab005969ed0c3ccb48/IdempotentSaga/Program.cs#L58) and the format of messages are changed, and a "value.schema.id" header is added to the messages.
+
 #### V 4.0.0 (29.11.2024)
 1. Updated to .Net 9 and up to Rebus version 8.7.1, which supports .Net 9
 2. Deleted the legacy code and the extra dependency
+
 #### V 3.0.1 (12.01.2024)
 1. Refactoring for Rebus version 8 with the corresponding API change;
 2. Implemented RetryStrategy - [automatic retries and error handling](https://github.com/rebus-org/Rebus/wiki/Automatic-retries-and-error-handling). Confirmations of receipt of messages are now sent not after they are received, but only after successful processing of messages or sending them to the error topic; 
@@ -83,9 +91,8 @@ if (!Library.IsLoaded)
 	At the request of the transport users, I enabled the previous transport behavior by default. **Now the [Rebus.Kafka transport](https://github.com/glazkovalex/Rebus.Kafka) automatically creates topics by default as before**. 
 	However, I do not recommend using allow.auto.create.topics=true for production! To disable allow.auto.create.topics, pass your ConsumerConfig or ConsumerAndBehaviorConfig configuration to the transport with the AllowAutoCreateTopics = false parameter disabled.
 
-### ToDo:
-- Schema Registry support in Kafka: Avro, JSON and Protobuf
-- In the future, the value from the message header "kafka-key" or, maybe, from the message property marked with the KafkaKey attribute will be inserted into the Apache Kafka message key. This will be useful for partitioning.
+### ToDo: 
+- Schema Registry support in Kafka: Avro and Protobuf
 - Start the transport from user-defined offsets for topics and partitions.
 ---
 If you have any recommendations or comments, I will be glad to hear.

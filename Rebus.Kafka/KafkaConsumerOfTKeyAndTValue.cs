@@ -178,7 +178,7 @@ namespace Rebus.Kafka
                 PartitionsAssigned.Invoke(sender, partitions);
         }
 
-        #region Скучное
+        #region Boring
 
         private readonly ConsumerBehaviorConfig _behaviorConfig = new ConsumerBehaviorConfig();
         private readonly IConsumer<TKey, TValue> _consumer;

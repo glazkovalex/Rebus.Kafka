@@ -31,7 +31,7 @@ namespace Rebus.Kafka
             }
         }
     }
-
+    
     /// <summary>
     /// An attribute for naming the topic of events in Apache Kafka
     /// </summary>

@@ -1,4 +1,4 @@
-﻿namespace Rebus.Kafka.NTests.Messages
+﻿namespace SchemaRegistry.Messages
 {
     /// <summary>Message class used for testing</summary>
     public class TestMessage

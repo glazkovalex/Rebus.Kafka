@@ -325,7 +325,7 @@ namespace Rebus.Kafka.Tests
             }
         }
 
-        [Fact(Skip = "For some reason it stopped working, I'll look at it later...")]
+        [Fact]
         public async Task RebusPerformance()
         {
             const int perfomanceCount = 10000;
