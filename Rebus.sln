@@ -32,7 +32,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IdempotentSaga", "Examples\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TwoBusInHost", "Examples\TwoBusInHost\TwoBusInHost.csproj", "{4BEC1496-1711-4931-92C9-8FD837652BB2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaRegistry", "SchemaRegistry\SchemaRegistry.csproj", "{E60D6AC4-51B8-4795-A324-27DCDEC09E4C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchemaRegistry", "Examples\SchemaRegistry\SchemaRegistry.csproj", "{E60D6AC4-51B8-4795-A324-27DCDEC09E4C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

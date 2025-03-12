@@ -11,7 +11,7 @@
     <PackageReference Include="Rebus.ServiceProvider" Version="10.3.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Rebus.Kafka\Rebus.Kafka.csproj" />
+    <ProjectReference Include="..\..\Rebus.Kafka\Rebus.Kafka.csproj" />
   </ItemGroup>
 
 </Project>
